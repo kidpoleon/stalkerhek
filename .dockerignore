@@ -1,0 +1,21 @@
+# Git
+.git
+
+# Local/secret-ish runtime state
+profiles.json
+stalkerhek.yml
+
+# Go build artifacts
+bin/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# Editor
+.vscode/
+.idea/
+.DS_Store
