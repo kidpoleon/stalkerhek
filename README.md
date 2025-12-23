@@ -278,6 +278,91 @@ Important rules:
 
 ---
 
+## Docker (Container) Guide
+
+This repo includes a `Dockerfile`, `.dockerignore`, and `docker-compose.yml`.
+
+Important concept:
+
+- `stalkerhek` starts **dynamic per-profile ports** (whatever you set in the WebUI).
+- In containers, you must ensure those ports are reachable.
+
+### Option A (Recommended on Linux): Docker Compose with `network_mode: host`
+
+On Linux, **host networking** is the cleanest way because you do **not** have to pre-map every HLS/Proxy port.
+
+1) Install Docker + Compose
+
+- Docker Engine: https://docs.docker.com/engine/install/
+- Compose plugin is included in most modern Docker installs.
+
+2) Create/initialize `profiles.json`
+
+The container persists profiles via a bind mount to `./profiles.json`.
+
+Create an empty file first (so the bind mount works):
+
+```bash
+echo '[]' > profiles.json
+```
+
+3) Build + run
+
+```bash
+docker compose up -d --build
+```
+
+4) Open the WebUI
+
+- `http://localhost:4400/dashboard`
+
+From other devices on your LAN:
+
+- `http://<YOUR_PC_LAN_IP>:4400/dashboard`
+
+5) Add profiles
+
+Pick any free ports (example `6600` / `6800`). With host networking, those ports are directly opened on your host.
+
+6) Stop / update
+
+```bash
+docker compose down
+docker compose up -d --build
+```
+
+### Option B (Docker Desktop / non-Linux): Bridge networking with explicit port publishing
+
+On Docker Desktop (Windows/macOS), `network_mode: host` is not supported in the same way.
+
+You must:
+
+- publish `4400` for the WebUI
+- publish every HLS/Proxy port you plan to use
+
+Example (edit `docker-compose.yml` using the commented template at the bottom):
+
+```yaml
+ports:
+  - "4400:4400"  # WebUI
+  - "6600:6600"  # HLS (example)
+  - "6800:6800"  # Proxy (example)
+```
+
+Then run:
+
+```bash
+docker compose up -d --build
+```
+
+### Logs
+
+```bash
+docker compose logs -f
+```
+
+---
+
 ## Graceful shutdown
 
 On Ctrl+C / SIGTERM:
