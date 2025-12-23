@@ -1,0 +1,29 @@
+# Go build outputs
+/bin/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Go test
+*.test
+*.out
+
+# Go workspace
+/go.work
+/go.work.sum
+
+# IDE/editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*.tmp
+.DS_Store
+
+# Local runtime / user data (may contain private portal credentials)
+profiles.json
+
+# Optional local config (if you create one)
+stalkerhek.yml
