@@ -1,0 +1,31 @@
+services:
+  stalkerhek:
+    build: .
+    container_name: stalkerhek
+    restart: unless-stopped
+
+    # Recommended for LAN usage so that per-profile ports you choose are reachable.
+    # With host networking, you do NOT need to pre-map every HLS/Proxy port.
+    # NOTE: Host networking works on Linux. On Docker Desktop (Windows/macOS), use the bridge-mode example below.
+    network_mode: host
+
+    # IMPORTANT:
+    # profiles.json is stored in /app inside the container.
+    # This volume persists your profiles between restarts.
+    volumes:
+      - ./profiles.json:/app/profiles.json
+
+# Bridge-mode example (Docker Desktop / non-Linux):
+# You MUST publish every HLS/Proxy port you plan to use.
+#
+# services:
+#   stalkerhek:
+#     build: .
+#     container_name: stalkerhek
+#     restart: unless-stopped
+#     ports:
+#       - "4400:4400"  # WebUI
+#       - "6600:6600"  # HLS (example)
+#       - "6800:6800"  # Proxy (example)
+#     volumes:
+#       - ./profiles.json:/app/profiles.json
