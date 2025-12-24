@@ -44,6 +44,12 @@ It includes a modern **dark green WebUI dashboard** for adding profiles and moni
 
 ---
 
+## Video Tutorial
+
+[![Watch the tutorial](https://img.youtube.com/vi/KVAyiSZ6zSo/0.jpg)](https://www.youtube.com/watch?v=KVAyiSZ6zSo)
+
+---
+
 ## Table of Contents
 
 - [What you get](#what-you-get)
