@@ -56,10 +56,7 @@ func normalizePortalURL(raw string) string {
 	if u.Path == "" || u.Path == "/" {
 		u.Path = "/portal.php"
 	}
-	if strings.HasSuffix(strings.ToLower(u.Path), "/load.php") {
-		u.Path = strings.TrimSuffix(u.Path, "/load.php") + "/portal.php"
-	}
-	if !strings.HasSuffix(strings.ToLower(u.Path), "/portal.php") {
+	if !strings.HasSuffix(strings.ToLower(u.Path), "/portal.php") && !strings.HasSuffix(strings.ToLower(u.Path), "/load.php") {
 		// If a random .php is given, portal.php is usually required in the same directory.
 		if strings.HasSuffix(strings.ToLower(u.Path), ".php") {
 			u.Path = path.Join(path.Dir(u.Path), "portal.php")
@@ -102,7 +99,8 @@ func isLikelyValidPortalURL(s string) bool {
 	if strings.TrimSpace(u.Host) == "" {
 		return false
 	}
-	return strings.HasSuffix(strings.ToLower(u.Path), "/portal.php")
+	lp := strings.ToLower(u.Path)
+	return strings.HasSuffix(lp, "/portal.php") || strings.HasSuffix(lp, "/load.php")
 }
 
 func friendlyStartError(err error) string {
@@ -209,7 +207,7 @@ func StartProfileServices(p Profile) {
 	p.MAC = strings.ToUpper(strings.TrimSpace(p.MAC))
 	if !isLikelyValidPortalURL(p.PortalURL) {
 		AppendProfileLog(p.ID, "Invalid portal URL: "+p.PortalURL)
-		SetProfileError(p.ID, p.Name, "Invalid Portal URL. Tip: it should look like http(s)://HOST/portal.php (some providers use /stalker_portal/portal.php).")
+		SetProfileError(p.ID, p.Name, "Invalid Portal URL. Tip: it should look like http(s)://HOST/portal.php or /load.php (some providers use /stalker_portal/portal.php).")
 		return
 	}
 	if !isValidMAC(p.MAC) {
