@@ -32,6 +32,41 @@ type Profile struct {
 	MAC       string `json:"mac"`
 	HlsPort   int    `json:"hls_port"`
 	ProxyPort int    `json:"proxy_port"`
+	// Advanced / portal auth fields
+	Model        string `json:"model,omitempty"`
+	SerialNumber string `json:"serial_number,omitempty"`
+	DeviceID     string `json:"device_id,omitempty"`
+	DeviceID2    string `json:"device_id2,omitempty"`
+	Signature    string `json:"signature,omitempty"`
+	TimeZone     string `json:"time_zone,omitempty"`
+	Username     string `json:"username,omitempty"`
+	Password     string `json:"password,omitempty"`
+	WatchDogTime int    `json:"watchdog_time,omitempty"`
+}
+
+func profileWithDefaults(p Profile) Profile {
+	if p.Model == "" {
+		p.Model = "MAG254"
+	}
+	if p.SerialNumber == "" {
+		p.SerialNumber = "0000000000000"
+	}
+	if p.DeviceID == "" {
+		p.DeviceID = strings.Repeat("f", 64)
+	}
+	if p.DeviceID2 == "" {
+		p.DeviceID2 = strings.Repeat("f", 64)
+	}
+	if p.Signature == "" {
+		p.Signature = strings.Repeat("f", 64)
+	}
+	if p.TimeZone == "" {
+		p.TimeZone = "UTC"
+	}
+	if p.WatchDogTime == 0 {
+		p.WatchDogTime = 5
+	}
+	return p
 }
 
 var macRe = regexp.MustCompile(`^([0-9A-F]{2}:){5}[0-9A-F]{2}$`)
@@ -231,18 +266,22 @@ func StartProfileServices(p Profile) {
 	SetProfileValidating(p.ID, p.Name, "Connecting... (attempt 1/3)")
 	AppendProfileLog(p.ID, "Connecting to portal")
 	// Build per-profile config
+	pd := profileWithDefaults(p)
+	deviceIdAuth := pd.Username == "" && pd.Password == ""
 	cfg := &stalker.Config{
 		Portal: &stalker.Portal{
-			Model:        "MAG254",
-			SerialNumber: "0000000000000",
-			DeviceID:     strings.Repeat("f", 64),
-			DeviceID2:    strings.Repeat("f", 64),
-			Signature:    strings.Repeat("f", 64),
-			TimeZone:     "UTC",
-			DeviceIdAuth: true,
-			WatchDogTime: 5,
-			Location:     p.PortalURL,
-			MAC:          p.MAC,
+			Model:        pd.Model,
+			SerialNumber: pd.SerialNumber,
+			DeviceID:     pd.DeviceID,
+			DeviceID2:    pd.DeviceID2,
+			Signature:    pd.Signature,
+			TimeZone:     pd.TimeZone,
+			DeviceIdAuth: deviceIdAuth,
+			WatchDogTime: pd.WatchDogTime,
+			Location:     pd.PortalURL,
+			MAC:          pd.MAC,
+			Username:     pd.Username,
+			Password:     pd.Password,
 		},
 		HLS: struct {
 			Enabled bool   `yaml:"enabled"`
@@ -491,6 +530,16 @@ func RegisterProfileHandlers(mux *http.ServeMux, onStart func()) {
 		mac := strings.ToUpper(strings.TrimSpace(r.FormValue("mac")))
 		hlsStr := strings.TrimSpace(r.FormValue("hls_port"))
 		proxyStr := strings.TrimSpace(r.FormValue("proxy_port"))
+		model := strings.TrimSpace(r.FormValue("model"))
+		serialNumber := strings.TrimSpace(r.FormValue("serial_number"))
+		deviceID := strings.TrimSpace(r.FormValue("device_id"))
+		deviceID2 := strings.TrimSpace(r.FormValue("device_id2"))
+		signature := strings.TrimSpace(r.FormValue("signature"))
+		timezone := strings.TrimSpace(r.FormValue("timezone"))
+		username := strings.TrimSpace(r.FormValue("username"))
+		password := strings.TrimSpace(r.FormValue("password"))
+		watchdogStr := strings.TrimSpace(r.FormValue("watchdog_time"))
+		watchdog, _ := strconv.Atoi(watchdogStr)
 		if portal == "" || mac == "" || hlsStr == "" || proxyStr == "" {
 			http.Error(w, "portal, mac, hls_port, proxy_port are required", http.StatusBadRequest)
 			return
@@ -520,6 +569,15 @@ func RegisterProfileHandlers(mux *http.ServeMux, onStart func()) {
 					profiles[i].MAC = mac
 					profiles[i].HlsPort = hlsPort
 					profiles[i].ProxyPort = proxyPort
+					profiles[i].Model = model
+					profiles[i].SerialNumber = serialNumber
+					profiles[i].DeviceID = deviceID
+					profiles[i].DeviceID2 = deviceID2
+					profiles[i].Signature = signature
+					profiles[i].TimeZone = timezone
+					profiles[i].Username = username
+					profiles[i].Password = password
+					profiles[i].WatchDogTime = watchdog
 					updated = true
 					break
 				}
@@ -537,11 +595,20 @@ func RegisterProfileHandlers(mux *http.ServeMux, onStart func()) {
 		}
 
 		p := AddProfile(Profile{
-			Name:      name,
-			PortalURL: portal,
-			MAC:       mac,
-			HlsPort:   hlsPort,
-			ProxyPort: proxyPort,
+			Name:         name,
+			PortalURL:    portal,
+			MAC:          mac,
+			HlsPort:      hlsPort,
+			ProxyPort:    proxyPort,
+			Model:        model,
+			SerialNumber: serialNumber,
+			DeviceID:     deviceID,
+			DeviceID2:    deviceID2,
+			Signature:    signature,
+			TimeZone:     timezone,
+			Username:     username,
+			Password:     password,
+			WatchDogTime: watchdog,
 		})
 		_ = SaveProfiles()
 		// Immediately start services for this profile in a goroutine
@@ -786,6 +853,48 @@ func RegisterProfileHandlers(mux *http.ServeMux, onStart func()) {
             </div>
           </div>
 
+          <details style="margin-top:12px">
+            <summary style="cursor:pointer;color:#7fba7f;font-size:.95em;user-select:none">Advanced Settings (optional)</summary>
+            <div style="margin-top:10px">
+              <div class="row two">
+                <div>
+                  <label for="username">Username</label>
+                  <input id="username" name="username" placeholder="Leave blank for Device ID auth" title="Portal username (if your provider uses login/password)" />
+                </div>
+                <div>
+                  <label for="password">Password</label>
+                  <input id="password" name="password" type="password" placeholder="Leave blank for Device ID auth" title="Portal password" />
+                </div>
+              </div>
+              <div class="row two">
+                <div>
+                  <label for="model">Model</label>
+                  <input id="model" name="model" placeholder="MAG254" title="STB model identifier" />
+                </div>
+                <div>
+                  <label for="serial_number">Serial Number</label>
+                  <input id="serial_number" name="serial_number" placeholder="0000000000000" title="STB serial number" />
+                </div>
+              </div>
+              <label for="device_id">Device ID</label>
+              <input id="device_id" name="device_id" placeholder="ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff" title="64-char hex device ID" />
+              <label for="device_id2">Device ID 2</label>
+              <input id="device_id2" name="device_id2" placeholder="ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff" title="64-char hex secondary device ID" />
+              <label for="signature">Signature</label>
+              <input id="signature" name="signature" placeholder="ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff" title="64-char hex signature" />
+              <div class="row two">
+                <div>
+                  <label for="timezone">Time Zone</label>
+                  <input id="timezone" name="timezone" placeholder="UTC" title="IANA timezone (e.g. UTC, America/New_York)" />
+                </div>
+                <div>
+                  <label for="watchdog_time">Watchdog Interval (min)</label>
+                  <input id="watchdog_time" name="watchdog_time" inputmode="numeric" placeholder="5" title="Watchdog keep-alive interval in minutes" />
+                </div>
+              </div>
+            </div>
+          </details>
+
           <div class="btnbar">
             <button class="primary" id="saveBtn" type="submit" title="Saves profile to the list below"><i class="fa-regular fa-floppy-disk"></i> <span class="btntext">Save Profile</span></button>
             <button class="ghost" type="button" id="cancelEdit" style="display:none" title="Cancel editing and reset the form"><i class="fa-solid fa-xmark"></i> <span class="btntext">Cancel Edit</span></button>
@@ -800,7 +909,7 @@ func RegisterProfileHandlers(mux *http.ServeMux, onStart func()) {
       <div class="sub">Start or stop streaming, copy your links, or update your details. Editing will stop the stream first for safety.</div>
       <div id="profiles" class="profiles">
         {{range .Profiles}}
-          <div class="p" data-id="{{.ID}}" data-name="{{.Name}}" data-portal="{{.PortalURL}}" data-mac="{{.MAC}}" data-hls="{{.HlsPort}}" data-proxy="{{.ProxyPort}}">
+          <div class="p" data-id="{{.ID}}" data-name="{{.Name}}" data-portal="{{.PortalURL}}" data-mac="{{.MAC}}" data-hls="{{.HlsPort}}" data-proxy="{{.ProxyPort}}" data-model="{{.Model}}" data-serial="{{.SerialNumber}}" data-deviceid="{{.DeviceID}}" data-deviceid2="{{.DeviceID2}}" data-signature="{{.Signature}}" data-timezone="{{.TimeZone}}" data-username="{{.Username}}" data-password="{{.Password}}" data-watchdog="{{.WatchDogTime}}">
             <div class="phead">
               <div>
                 <div class="pname">{{if .Name}}{{.Name}}{{else}}Profile {{.ID}}{{end}}</div>
@@ -1046,6 +1155,15 @@ func RegisterProfileHandlers(mux *http.ServeMux, onStart func()) {
       document.getElementById('mac').value=mac;
       document.getElementById('hls_port').value=hls;
       document.getElementById('proxy_port').value=proxy;
+      document.getElementById('model').value=card.getAttribute('data-model')||'';
+      document.getElementById('serial_number').value=card.getAttribute('data-serial')||'';
+      document.getElementById('device_id').value=card.getAttribute('data-deviceid')||'';
+      document.getElementById('device_id2').value=card.getAttribute('data-deviceid2')||'';
+      document.getElementById('signature').value=card.getAttribute('data-signature')||'';
+      document.getElementById('timezone').value=card.getAttribute('data-timezone')||'';
+      document.getElementById('username').value=card.getAttribute('data-username')||'';
+      document.getElementById('password').value=card.getAttribute('data-password')||'';
+      document.getElementById('watchdog_time').value=card.getAttribute('data-watchdog')||'';
 
       document.getElementById('saveBtn').innerHTML='<i class="fa-regular fa-floppy-disk"></i> <span class="btntext">Save Changes</span>';
       document.getElementById('cancelEdit').style.display='inline-flex';
