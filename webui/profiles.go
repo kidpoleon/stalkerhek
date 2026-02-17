@@ -1036,8 +1036,7 @@ func RegisterProfileHandlers(mux *http.ServeMux, onStart func()) {
         const u = new URL(s);
         let p = (u.pathname||'/').trim();
         if(!p || p === '/') p = '/portal.php';
-        if(/\/load\.php$/i.test(p)) p = p.replace(/\/load\.php$/i, '/portal.php');
-        if(!/\/portal\.php$/i.test(p)){
+        if(!/\/portal\.php$/i.test(p) && !/\/load\.php$/i.test(p)){
           if(/\.php$/i.test(p)) p = '/portal.php';
           else p = (p.replace(/\/+$/,'') || '') + '/portal.php';
         }
@@ -1073,7 +1072,7 @@ func RegisterProfileHandlers(mux *http.ServeMux, onStart func()) {
       portal.value=v;
       const m=(mac.value||'').trim().toUpperCase();
       mac.value=m;
-      const portalOk = /^https?:\/\//i.test(v) && /portal\.php(\?.*)?$/i.test(v);
+      const portalOk = /^https?:\/\//i.test(v) && /(portal|load)\.php(\?.*)?$/i.test(v);
       if(!portalOk){ portalErr.style.display='block'; ok=false } else portalErr.style.display='none';
       if(!macRe.test(m)){ macErr.style.display='block'; ok=false } else macErr.style.display='none';
       return ok;
@@ -1170,6 +1169,7 @@ func RegisterProfileHandlers(mux *http.ServeMux, onStart func()) {
       const hint=document.getElementById('formHint');
       if(hint) hint.textContent='Editing will update this profile, stop any running services, then restart automatically.';
 	  showToast('Editing profile', 'Stopped the running playlist for safety. Make changes and click Save Changes to apply.');
+      Alpine.$data(document.querySelector('[x-data]')).step='create';
       window.scrollTo({top:0, behavior:'smooth'});
     });
 
