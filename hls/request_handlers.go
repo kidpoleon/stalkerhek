@@ -21,9 +21,9 @@ import (
 //                  the "US| ESPN" level that sits directly above channels in
 //                  the UI drill-down, which is what M3U8 players group by
 func writeExtInf(w http.ResponseWriter, title, rawGenre, link string) {
-	tvgName := stalker.StripSuperscripts(title)
+	tvgName := stalker.CleanTitleForM3U8(title)
 	groupTitle := stalker.CleanGenreForM3U8(rawGenre)
-	displayName := stalker.StripSuperscripts(title)
+	displayName := stalker.CleanTitleForM3U8(title)
 	fmt.Fprintf(w,
 		"#EXTINF:-1 tvg-id=\"\" tvg-name=\"%s\" tvg-logo=\"\" group-title=\"%s\", %s\n%s\n",
 		tvgName, groupTitle, displayName, link,
