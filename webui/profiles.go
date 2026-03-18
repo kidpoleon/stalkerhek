@@ -420,6 +420,36 @@ func StartProfileServices(p Profile) {
 	}
 	SetProfileSuccess(p.ID, p.Name, len(chs), "", "", true)
 	AppendProfileLog(p.ID, fmt.Sprintf("Retrieved %d channels", len(chs)))
+
+	// Log a sample of the first 24 channels so the operator can quickly verify
+	// what the portal returned without needing a raw dump file.
+	{
+		const sampleSize = 24
+		const lineWidth = 60 // width of the channel name column
+		banner := fmt.Sprintf("[ %s — channel sample (first %d) ]", p.Name, sampleSize)
+		AppendProfileLog(p.ID, banner)
+		AppendProfileLog(p.ID, fmt.Sprintf("%-*s  %s", lineWidth, "CHANNEL NAME", "GENRE"))
+		AppendProfileLog(p.ID, strings.Repeat("-", lineWidth+2+40))
+		n := 0
+		for title, ch := range chs {
+			if n >= sampleSize {
+				break
+			}
+			name := strings.TrimSpace(title)
+			if len(name) > lineWidth {
+				name = name[:lineWidth-1] + "…"
+			}
+			genre := "Other"
+			if ch != nil {
+				genre = ch.Genre()
+			}
+			AppendProfileLog(p.ID, fmt.Sprintf("%-*s  %s", lineWidth, name, genre))
+			n++
+		}
+		AppendProfileLog(p.ID, strings.Repeat("-", lineWidth+2+40))
+		AppendProfileLog(p.ID, fmt.Sprintf("(showing %d of %d total channels)", n, len(chs)))
+	}
+
 	if shouldStop("before starting services") {
 		return
 	}
