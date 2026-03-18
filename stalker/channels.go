@@ -119,8 +119,23 @@ func (c *Channel) Genre() string {
 	return strings.Title(g)
 }
 
+// RawGenre returns the portal genre title exactly as received, without any
+// case transformation. Returns an empty string when no genre is available.
+// Used for M3U8 group-title output where faithful portal casing is preferred.
+func (c *Channel) RawGenre() string {
+	if c.Genres == nil || *c.Genres == nil {
+		return ""
+	}
+	g, ok := (*c.Genres)[c.GenreID]
+	if !ok || strings.TrimSpace(g) == "" {
+		return ""
+	}
+	return strings.TrimSpace(g)
+}
+
 // RetrieveChannels retrieves all TV channels from stalker portal.
-func (p *Portal) RetrieveChannels() (map[string]*Channel, error) {
+// The second return value is the raw JSON response bytes for diagnostic logging.
+func (p *Portal) RetrieveChannels() (map[string]*Channel, []byte, error) {
 	type tmpStruct struct {
 		Js json.RawMessage `json:"js"`
 	}
@@ -128,7 +143,7 @@ func (p *Portal) RetrieveChannels() (map[string]*Channel, error) {
 
 	content, err := p.httpRequest(p.Location + "?type=itv&action=get_all_channels&JsHttpRequest=1-xml")
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	// Dump json output to file
@@ -137,11 +152,11 @@ func (p *Portal) RetrieveChannels() (map[string]*Channel, error) {
 	dec := json.NewDecoder(bytes.NewReader(content))
 	dec.UseNumber()
 	if err := dec.Decode(&tmp); err != nil {
-		return nil, fmt.Errorf("get_all_channels: invalid response: %w", err)
+		return nil, nil, fmt.Errorf("get_all_channels: invalid response: %w", err)
 	}
 	js := bytes.TrimSpace(tmp.Js)
 	if len(js) == 0 || js[0] == '[' {
-		return nil, fmt.Errorf("get_all_channels: portal returned no channel data (check MAC address and portal URL)")
+		return nil, nil, fmt.Errorf("get_all_channels: portal returned no channel data (check MAC address and portal URL)")
 	}
 	type jsPayload struct {
 		Data []struct {
@@ -157,15 +172,15 @@ func (p *Portal) RetrieveChannels() (map[string]*Channel, error) {
 	}
 	var payload jsPayload
 	if err := json.Unmarshal(js, &payload); err != nil {
-		return nil, fmt.Errorf("get_all_channels: invalid js payload (check MAC address and portal URL)")
+		return nil, nil, fmt.Errorf("get_all_channels: invalid js payload (check MAC address and portal URL)")
 	}
 	if len(payload.Data) == 0 {
-		return nil, fmt.Errorf("get_all_channels: no channels returned (check MAC address and portal URL)")
+		return nil, nil, fmt.Errorf("get_all_channels: no channels returned (check MAC address and portal URL)")
 	}
 
 	genres, err := p.getGenres()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	// Build channels list and return
@@ -189,7 +204,7 @@ func (p *Portal) RetrieveChannels() (map[string]*Channel, error) {
 		}
 	}
 
-	return channels, nil
+	return channels, content, nil
 }
 
 func (p *Portal) getGenres() (map[string]string, error) {

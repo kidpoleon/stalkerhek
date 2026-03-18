@@ -5,6 +5,7 @@ import (
 	"strings"
 )
 
+
 var deriveCatStripRE = regexp.MustCompile(`(?i)^\s*(\[[^\]]*\]|\([^\)]*\)|\{[^\}]*\})\s*`)
 
 // DeriveCategory extracts a clean top-level category from a raw portal genre
@@ -104,4 +105,50 @@ func StripSuperscripts(s string) string {
 	}, s)
 	// Collapse any runs of whitespace created by the removals.
 	return strings.Join(strings.Fields(mapped), " ")
+}
+
+// orphanPunctRE matches leading or trailing punctuation characters that are
+// left stranded after superscript removal (e.g. the "/" in "HD/RAW" once both
+// HD and RAW have been stripped).
+var orphanPunctRE = regexp.MustCompile(`^[\s/\-_,;:.#*]+|[\s/\-_,;:.#*]+$`)
+
+// CleanGenreForM3U8 prepares a raw portal genre string for use as a
+// group-title value in an M3U8 playlist. It:
+//
+//  1. Strips superscript/subscript decorator characters.
+//  2. Splits on "|" and discards any segment that no longer contains an
+//     alphanumeric character (i.e. segments whose entire content was
+//     decorators), then cleans leading/trailing orphaned punctuation from
+//     each remaining segment.
+//  3. Rejoins surviving segments with "| " and returns the result.
+//
+// Examples:
+//
+//	"US| MAX ESPN ᴴᴰ/ᴿᴬᵂ ⁶⁰ᶠᵖˢ"  →  "US| MAX ESPN"
+//	"4K| ᵁᴴᴰ ³⁸⁴⁰ᴾ"              →  "4K"
+//	"US| MLB TEAM PPV"            →  "US| MLB TEAM PPV"
+//	""                            →  ""
+func CleanGenreForM3U8(s string) string {
+	s = StripSuperscripts(s)
+	if s == "" {
+		return ""
+	}
+	parts := strings.Split(s, "|")
+	kept := make([]string, 0, len(parts))
+	for _, part := range parts {
+		// Strip orphaned punctuation from each segment.
+		p := strings.TrimSpace(orphanPunctRE.ReplaceAllString(part, ""))
+		// Discard the segment entirely if it has no alphanumeric content.
+		hasAlnum := false
+		for _, r := range p {
+			if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') {
+				hasAlnum = true
+				break
+			}
+		}
+		if hasAlnum {
+			kept = append(kept, p)
+		}
+	}
+	return strings.Join(kept, "| ")
 }
