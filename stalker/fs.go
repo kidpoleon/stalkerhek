@@ -64,6 +64,12 @@ type Portal struct {
 	Token        string `yaml:"token"`
 	WatchDogTime int    `yaml:"watchdog"`
 	DeviceIdAuth bool   `yaml:"device_id_auth"`
+
+	// DumpPath is the directory where the raw channel list JSON will be
+	// written on each successful retrieval. Set by the caller (webui) using
+	// the first 10 characters of the profile name as a subfolder under
+	// /tmp. Leave empty to skip the dump.
+	DumpPath string `yaml:"-"`
 }
 
 // ReadConfig returns configuration from the file in Portal object
