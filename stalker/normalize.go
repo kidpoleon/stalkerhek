@@ -78,8 +78,9 @@ func DeriveCategory(name string) string {
 	return first
 }
 
-// StripSuperscripts removes Unicode superscript and subscript characters that
-// IPTV portals use for visual decoration (e.g. ᴴᴰ, ᴿᴬᵂ, ⁶⁰ᶠᵖˢ, ᵁᴴᴰ, ³⁸⁴⁰ᴾ).
+// StripSuperscripts removes Unicode superscript, subscript, and decorative
+// modifier characters that IPTV portals use for visual decoration
+// (e.g. ᴴᴰ, ᴿᴬᵂ, ⁶⁰ᶠᵖˢ, ᵁᴴᴰ, ³⁸⁴⁰ᴾ, ⱽ, ☼).
 // After removal any runs of whitespace left behind are collapsed to a single
 // space and the result is trimmed.
 //
@@ -88,17 +89,23 @@ func DeriveCategory(name string) string {
 //	U+00B2–U+00B3, U+00B9          legacy superscript digits ²³¹ in Latin-1
 //	U+02B0–U+02FF                   Spacing Modifier Letters (ᶠᵖˢ …)
 //	U+1D00–U+1DBF                   Phonetic Extensions + Supplement (ᴴᴰᴿᴬᵂᵁ …)
+//	U+2069                          Pop Directional Isolate (bidi control)
 //	U+2070–U+209F                   Superscripts and Subscripts block
+//	U+2600–U+26FF                   Miscellaneous Symbols (☼ ★ etc.)
+//	U+2C60–U+2C7F                   Latin Extended-C modifiers (ⱽ etc.)
 //
-// Characters outside these ranges — including all real-language scripts — are
-// left untouched.
+// Characters outside these ranges — including Arabic, Latin-extended letters,
+// and all other real-language scripts — are left untouched.
 func StripSuperscripts(s string) string {
 	mapped := strings.Map(func(r rune) rune {
 		if (r >= 0x00B2 && r <= 0x00B3) ||
 			r == 0x00B9 ||
 			(r >= 0x02B0 && r <= 0x02FF) ||
 			(r >= 0x1D00 && r <= 0x1DBF) ||
-			(r >= 0x2070 && r <= 0x209F) {
+			r == 0x2069 ||
+			(r >= 0x2070 && r <= 0x209F) ||
+			(r >= 0x2600 && r <= 0x26FF) ||
+			(r >= 0x2C60 && r <= 0x2C7F) {
 			return -1
 		}
 		return r
@@ -111,6 +118,11 @@ func StripSuperscripts(s string) string {
 // left stranded after superscript removal (e.g. the "/" in "HD/RAW" once both
 // HD and RAW have been stripped).
 var orphanPunctRE = regexp.MustCompile(`^[\s/\-_,;:.#*]+|[\s/\-_,;:.#*]+$`)
+
+// orphanMidPunctRE matches runs of punctuation surrounded by whitespace that
+// are left stranded in the middle of a string after superscript removal
+// (e.g. " / " remaining from "ᴴᴰ/ᴿᴬᵂ" after both sides are stripped).
+var orphanMidPunctRE = regexp.MustCompile(`\s[/\-_,;:.]+\s`)
 
 // CleanGenreForM3U8 prepares a raw portal genre string for use as a
 // group-title value in an M3U8 playlist. It:
@@ -155,4 +167,30 @@ func CleanGenreForM3U8(s string) string {
 	// delimiter in group-title values and may misparse or ignore entries
 	// that contain them.
 	return strings.Join(kept, " ")
+}
+
+// CleanTitleForM3U8 prepares a raw channel title for use in tvg-name and the
+// display name field of an M3U8 #EXTINF line. It strips superscript/subscript
+// decorators and then removes any punctuation characters (/, -, etc.) that
+// are left orphaned when the decorators they separated are both removed.
+//
+// Unlike CleanGenreForM3U8 it does NOT split or remove pipe characters —
+// pipes in channel titles carry meaning (e.g. "AU (STAN 01) | Champions Lg").
+//
+// Examples:
+//
+//	"## MAX ESPN ᴴᴰ/ᴿᴬᵂ ⁶⁰ᶠᵖˢ ##"  →  "## MAX ESPN ##"
+//	"##### NEWS ᴴᴰ/ᴿᴬᵂ ⁶⁰ᶠᵖˢ #####"  →  "##### NEWS #####"
+//	"AU (STAN 01) | Champions League"  →  "AU (STAN 01) | Champions League"
+func CleanTitleForM3U8(s string) string {
+	s = StripSuperscripts(s)
+	if s == "" {
+		return ""
+	}
+	// Remove orphaned punctuation: sequences of /, -, _ etc. that are now
+	// surrounded only by whitespace (i.e. were separating two stripped tokens).
+	// We do this by collapsing any run of whitespace+punctuation+whitespace
+	// down to a single space.
+	s = orphanMidPunctRE.ReplaceAllString(s, " ")
+	return strings.TrimSpace(s)
 }
