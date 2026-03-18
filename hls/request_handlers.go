@@ -30,13 +30,13 @@ func writeExtInf(w http.ResponseWriter, title, rawGenre, link string) {
 	)
 }
 
-// Handles '/iptv' requests
-func (s *serverState) playlistHandler(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "audio/x-mpegurl; charset=utf-8")
-	w.WriteHeader(http.StatusOK)
-	scheme, host := externalBase(r)
-
-	fmt.Fprintln(w, "#EXTM3U")
+// writePlaylist writes all #EXTINF entries to w, deduplicating by cleaned
+// tvg-name. The first channel whose cleaned title is seen wins; subsequent
+// channels with the same cleaned title are silently skipped. This prevents
+// duplicate entries in tools like Dispatcharr when the portal assigns the
+// same display name to multiple stream variants.
+func (s *serverState) writePlaylist(w http.ResponseWriter, scheme, host, prefix string) {
+	seen := make(map[string]struct{}, len(s.sortedChannels))
 	for _, title := range s.sortedChannels {
 		ch := s.playlist[title]
 		if ch == nil || ch.StalkerChannel == nil {
@@ -45,9 +45,23 @@ func (s *serverState) playlistHandler(w http.ResponseWriter, r *http.Request) {
 		if !filterstore.IsAllowed(s.profileID, ch.StalkerChannel) {
 			continue
 		}
-		link := scheme + "://" + host + "/iptv/" + url.PathEscape(title)
+		cleanedName := stalker.CleanTitleForM3U8(title)
+		if _, dup := seen[cleanedName]; dup {
+			continue
+		}
+		seen[cleanedName] = struct{}{}
+		link := scheme + "://" + host + prefix + url.PathEscape(title)
 		writeExtInf(w, title, ch.RawGenre, link)
 	}
+}
+
+// Handles '/iptv' requests
+func (s *serverState) playlistHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "audio/x-mpegurl; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	scheme, host := externalBase(r)
+	fmt.Fprintln(w, "#EXTM3U")
+	s.writePlaylist(w, scheme, host, "/iptv/")
 }
 
 // Handles '/iptv/' requests
@@ -127,17 +141,7 @@ func (s *serverState) rootHandler(w http.ResponseWriter, r *http.Request) {
 		scheme, host := externalBase(r)
 
 		fmt.Fprintln(w, "#EXTM3U")
-		for _, title := range s.sortedChannels {
-			ch := s.playlist[title]
-			if ch == nil || ch.StalkerChannel == nil {
-				continue
-			}
-			if !filterstore.IsAllowed(s.profileID, ch.StalkerChannel) {
-				continue
-			}
-			link := scheme + "://" + host + "/" + url.PathEscape(title)
-			writeExtInf(w, title, ch.RawGenre, link)
-		}
+		s.writePlaylist(w, scheme, host, "/")
 		return
 	}
 
