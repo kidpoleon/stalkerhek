@@ -150,5 +150,9 @@ func CleanGenreForM3U8(s string) string {
 			kept = append(kept, p)
 		}
 	}
-	return strings.Join(kept, "| ")
+	// Join surviving segments with a single space. Pipes are intentionally
+	// dropped — external tools like Dispatcharr treat | as a hierarchy
+	// delimiter in group-title values and may misparse or ignore entries
+	// that contain them.
+	return strings.Join(kept, " ")
 }
