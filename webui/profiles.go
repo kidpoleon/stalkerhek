@@ -360,6 +360,7 @@ func StartProfileServices(p Profile) {
 	AppendProfileLog(p.ID, "Retrieving channels")
 	// Retrieve channels (soft timeout: 3 tries)
 	chs := map[string]*stalker.Channel{}
+	var rawChannelResponse []byte
 	{
 		const maxAttempts = 3
 		const perAttemptTimeout = 30 * time.Second
@@ -372,17 +373,19 @@ func StartProfileServices(p Profile) {
 			AppendProfileLog(p.ID, fmt.Sprintf("Retrieve channels attempt %d/%d", attempt, maxAttempts))
 			type result struct {
 				chs map[string]*stalker.Channel
+				raw []byte
 				err error
 			}
 			resCh := make(chan result, 1)
 			go func() {
-				c, err := cfg.Portal.RetrieveChannels()
-				resCh <- result{chs: c, err: err}
+				c, raw, err := cfg.Portal.RetrieveChannels()
+				resCh <- result{chs: c, raw: raw, err: err}
 			}()
 			select {
 			case res := <-resCh:
 				if res.err == nil {
 					chs = res.chs
+					rawChannelResponse = res.raw
 					lastErr = nil
 					attempt = maxAttempts
 					break
@@ -421,33 +424,23 @@ func StartProfileServices(p Profile) {
 	SetProfileSuccess(p.ID, p.Name, len(chs), "", "", true)
 	AppendProfileLog(p.ID, fmt.Sprintf("Retrieved %d channels", len(chs)))
 
-	// Log a sample of the first 24 channels so the operator can quickly verify
-	// what the portal returned without needing a raw dump file.
+	// Log the first 24 lines of the raw portal channel response so the operator
+	// can verify what the portal actually returned.
 	{
-		const sampleSize = 24
-		const lineWidth = 60 // width of the channel name column
-		banner := fmt.Sprintf("[ %s — channel sample (first %d) ]", p.Name, sampleSize)
-		AppendProfileLog(p.ID, banner)
-		AppendProfileLog(p.ID, fmt.Sprintf("%-*s  %s", lineWidth, "CHANNEL NAME", "GENRE"))
-		AppendProfileLog(p.ID, strings.Repeat("-", lineWidth+2+40))
-		n := 0
-		for title, ch := range chs {
-			if n >= sampleSize {
-				break
+		const maxLines = 24
+		AppendProfileLog(p.ID, fmt.Sprintf("=== %s: raw channel response (first %d lines) ===", p.Name, maxLines))
+		if len(rawChannelResponse) == 0 {
+			AppendProfileLog(p.ID, "  (no data)")
+		} else {
+			lines := strings.SplitN(string(rawChannelResponse), "\n", maxLines+1)
+			if len(lines) > maxLines {
+				lines = lines[:maxLines]
 			}
-			name := strings.TrimSpace(title)
-			if len(name) > lineWidth {
-				name = name[:lineWidth-1] + "…"
+			for i, line := range lines {
+				AppendProfileLog(p.ID, fmt.Sprintf("  %3d | %s", i+1, line))
 			}
-			genre := "Other"
-			if ch != nil {
-				genre = ch.Genre()
-			}
-			AppendProfileLog(p.ID, fmt.Sprintf("%-*s  %s", lineWidth, name, genre))
-			n++
 		}
-		AppendProfileLog(p.ID, strings.Repeat("-", lineWidth+2+40))
-		AppendProfileLog(p.ID, fmt.Sprintf("(showing %d of %d total channels)", n, len(chs)))
+		AppendProfileLog(p.ID, fmt.Sprintf("=== end of sample (%d bytes total) ===", len(rawChannelResponse)))
 	}
 
 	if shouldStop("before starting services") {
