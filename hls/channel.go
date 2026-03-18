@@ -37,7 +37,8 @@ type Channel struct {
 
 	Logo *Logo // Reference to channel's logo
 
-	Genre string // TV channel genre. This field does not require synchronization
+	Genre    string // TV channel genre, title-cased. Used by filter UI display.
+	RawGenre string // Portal genre string, unmodified casing. Used for M3U8 output.
 }
 
 func (c *Channel) validate() error {

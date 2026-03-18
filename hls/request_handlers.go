@@ -20,9 +20,9 @@ import (
 //   - group-title: raw portal genre name with superscripts stripped; this is
 //                  the "US| ESPN" level that sits directly above channels in
 //                  the UI drill-down, which is what M3U8 players group by
-func writeExtInf(w http.ResponseWriter, title, genre, link string) {
+func writeExtInf(w http.ResponseWriter, title, rawGenre, link string) {
 	tvgName := stalker.StripSuperscripts(title)
-	groupTitle := stalker.StripSuperscripts(genre)
+	groupTitle := stalker.CleanGenreForM3U8(rawGenre)
 	displayName := stalker.StripSuperscripts(title)
 	fmt.Fprintf(w,
 		"#EXTINF:-1 tvg-id=\"\" tvg-name=\"%s\" tvg-logo=\"\" group-title=\"%s\", %s\n%s\n",
@@ -46,7 +46,7 @@ func (s *serverState) playlistHandler(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		link := scheme + "://" + host + "/iptv/" + url.PathEscape(title)
-		writeExtInf(w, title, ch.Genre, link)
+		writeExtInf(w, title, ch.RawGenre, link)
 	}
 }
 
@@ -136,7 +136,7 @@ func (s *serverState) rootHandler(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 			link := scheme + "://" + host + "/" + url.PathEscape(title)
-			writeExtInf(w, title, ch.Genre, link)
+			writeExtInf(w, title, ch.RawGenre, link)
 		}
 		return
 	}

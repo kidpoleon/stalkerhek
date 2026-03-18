@@ -34,7 +34,8 @@ func StartWithContext(ctx context.Context, profileID int, chs map[string]*stalke
 				Mux:  &sync.Mutex{},
 				Link: v.Logo(),
 			},
-			Genre: v.Genre(),
+			Genre:    v.Genre(),
+			RawGenre: v.RawGenre(),
 		}
 		s.sortedChannels = append(s.sortedChannels, k)
 	}
