@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
-	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -13,8 +12,6 @@ import (
 	"github.com/kidpoleon/stalkerhek/filterstore"
 	"github.com/kidpoleon/stalkerhek/stalker"
 )
-
-var deriveCatStripRE = regexp.MustCompile(`(?i)^\s*(\[[^\]]*\]|\([^\)]*\)|\{[^\}]*\})\s*`)
 
 type genreInfo struct {
 	GenreID   string `json:"genre_id"`
@@ -25,66 +22,6 @@ type genreInfo struct {
 	Enabled   int    `json:"enabled"`
 	Blocked   int    `json:"blocked"`
 }
-
-	// Category is a derived grouping key used by the WebUI.
-	// We keep it server-side so UI stays consistent across portals.
-	// Examples:
-	//   "MX| DAZN" => "MX"
-	//   "US - Sports" => "US"
-	//   "Sports" => "Sports"
-	// It is intentionally heuristic and designed to be predictable.
-	func deriveCategory(name string) string {
-		n := strings.TrimSpace(name)
-		if n == "" {
-			return "Other"
-		}
-		// Normalize common noisy prefixes like [UK], (VIP), {HD}.
-		n = deriveCatStripRE.ReplaceAllString(n, "")
-		n = strings.TrimSpace(n)
-		n = strings.Join(strings.Fields(n), " ")
-		// Normalize unicode-ish separators and bullets into spaces.
-		repl := strings.NewReplacer(
-			"•", " ",
-			"·", " ",
-			"—", "-",
-			"–", "-",
-			"→", " ",
-			"⇒", " ",
-			"»", " ",
-		)
-		n = repl.Replace(n)
-		n = strings.Join(strings.Fields(n), " ")
-		// Normalize common IPTV separators.
-		pipeNorm := strings.ReplaceAll(n, " | ", "|")
-		pipeNorm = strings.ReplaceAll(pipeNorm, "| ", "|")
-		pipeNorm = strings.ReplaceAll(pipeNorm, " |", "|")
-		pipeNorm = strings.ReplaceAll(pipeNorm, "||", "|")
-		if i := strings.Index(pipeNorm, "|"); i > 0 {
-			left := strings.TrimSpace(pipeNorm[:i])
-			if left != "" {
-				return left
-			}
-		}
-		// Fallback: take first token after replacing separators with spaces.
-		seps := []string{"/", ":", ">", "-", "_", "\\", ".", ","}
-		for _, s := range seps {
-			n = strings.ReplaceAll(n, s, " ")
-		}
-		n = strings.Join(strings.Fields(n), " ")
-		parts := strings.Split(n, " ")
-		if len(parts) == 0 {
-			return "Other"
-		}
-		first := strings.TrimSpace(parts[0])
-		if first == "" {
-			return "Other"
-		}
-		// Small prefix groups (US/UK/MX) often want the second token too.
-		if len(first) <= 3 && len(parts) > 1 {
-			return strings.TrimSpace(first + " " + parts[1])
-		}
-		return first
-	}
 
 	type categoryInfo struct {
 		Category string `json:"category"`
@@ -125,7 +62,7 @@ func RegisterFilterHandlers(mux *http.ServeMux) {
 			if ch == nil {
 				continue
 			}
-			cat := deriveCategory(strings.TrimSpace(ch.Genre()))
+			cat := stalker.DeriveCategory(strings.TrimSpace(ch.Genre()))
 			ci := m[cat]
 			if ci == nil {
 				ci = &categoryInfo{Category: cat}
@@ -260,7 +197,7 @@ func RegisterFilterHandlers(mux *http.ServeMux) {
 				gid = "Other"
 			}
 			gname := strings.TrimSpace(ch.Genre())
-			cat := deriveCategory(gname)
+			cat := stalker.DeriveCategory(gname)
 			if catFilter != "" && cat != catFilter {
 				continue
 			}
@@ -477,7 +414,7 @@ func RegisterFilterHandlers(mux *http.ServeMux) {
 			if ch == nil {
 				continue
 			}
-			if deriveCategory(strings.TrimSpace(ch.Genre())) != cat {
+			if stalker.DeriveCategory(strings.TrimSpace(ch.Genre())) != cat {
 				continue
 			}
 			gid := strings.TrimSpace(ch.GenreID)
@@ -540,7 +477,7 @@ func RegisterFilterHandlers(mux *http.ServeMux) {
 			if ch == nil {
 				continue
 			}
-			cat := deriveCategory(strings.TrimSpace(ch.Genre()))
+			cat := stalker.DeriveCategory(strings.TrimSpace(ch.Genre()))
 			if _, ok := cats[cat]; !ok {
 				continue
 			}
