@@ -5,10 +5,30 @@ import (
 	"log"
 	"net/http"
 	"net/url"
-	"strings"
 
 	"github.com/kidpoleon/stalkerhek/filterstore"
+	"github.com/kidpoleon/stalkerhek/stalker"
 )
+
+// writeExtInf writes a single #EXTINF line and stream URL to the playlist.
+//
+// Field policy (keeps M3U8 clean for tools like Dispatcharr):
+//   - tvg-id    : blank — the raw Stalker CMD is an ffmpeg URL, not an EPG ID
+//   - tvg-name  : channel title with superscript/subscript decorators stripped
+//   - tvg-logo  : blank — relative logo paths break external tools; logo
+//                 serving still works internally via the /logo/ endpoint
+//   - group-title: raw portal genre name with superscripts stripped; this is
+//                  the "US| ESPN" level that sits directly above channels in
+//                  the UI drill-down, which is what M3U8 players group by
+func writeExtInf(w http.ResponseWriter, title, genre, link string) {
+	tvgName := stalker.StripSuperscripts(title)
+	groupTitle := stalker.StripSuperscripts(genre)
+	displayName := stalker.StripSuperscripts(title)
+	fmt.Fprintf(w,
+		"#EXTINF:-1 tvg-id=\"\" tvg-name=\"%s\" tvg-logo=\"\" group-title=\"%s\", %s\n%s\n",
+		tvgName, groupTitle, displayName, link,
+	)
+}
 
 // Handles '/iptv' requests
 func (s *serverState) playlistHandler(w http.ResponseWriter, r *http.Request) {
@@ -26,10 +46,7 @@ func (s *serverState) playlistHandler(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		link := scheme + "://" + host + "/iptv/" + url.PathEscape(title)
-		logo := "/logo/" + url.PathEscape(title)
-		tvgID := strings.ReplaceAll(ch.StalkerChannel.CMD, "\"", "")
-		tvgName := strings.ReplaceAll(title, "\"", "")
-		fmt.Fprintf(w, "#EXTINF:-1 tvg-id=\"%s\" tvg-name=\"%s\" tvg-logo=\"%s\" group-title=\"%s\", %s\n%s\n", tvgID, tvgName, logo, ch.Genre, title, link)
+		writeExtInf(w, title, ch.Genre, link)
 	}
 }
 
@@ -91,7 +108,7 @@ func (s *serverState) logoHandler(w http.ResponseWriter, r *http.Request) {
 		cr.ChannelRef.Logo.CacheContentType = contentType
 	}
 
-	// Create local copy so we don't need thread syncrhonization
+	// Create local copy so we don't need thread synchronization
 	logo := *cr.ChannelRef.Logo
 
 	// Unlock
@@ -103,13 +120,13 @@ func (s *serverState) logoHandler(w http.ResponseWriter, r *http.Request) {
 
 // rootHandler serves playlist at "/" and channels at root paths without the "/iptv" prefix.
 func (s *serverState) rootHandler(w http.ResponseWriter, r *http.Request) {
-    if r.URL.Path == "/" {
-        // Serve playlist at root
-        w.Header().Set("Content-Type", "audio/x-mpegurl; charset=utf-8")
-        w.WriteHeader(http.StatusOK)
+	if r.URL.Path == "/" {
+		// Serve playlist at root
+		w.Header().Set("Content-Type", "audio/x-mpegurl; charset=utf-8")
+		w.WriteHeader(http.StatusOK)
 		scheme, host := externalBase(r)
 
-        fmt.Fprintln(w, "#EXTM3U")
+		fmt.Fprintln(w, "#EXTM3U")
 		for _, title := range s.sortedChannels {
 			ch := s.playlist[title]
 			if ch == nil || ch.StalkerChannel == nil {
@@ -119,36 +136,33 @@ func (s *serverState) rootHandler(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 			link := scheme + "://" + host + "/" + url.PathEscape(title)
-            logo := "/logo/" + url.PathEscape(title)
-			tvgID := strings.ReplaceAll(ch.StalkerChannel.CMD, "\"", "")
-			tvgName := strings.ReplaceAll(title, "\"", "")
-			fmt.Fprintf(w, "#EXTINF:-1 tvg-id=\"%s\" tvg-name=\"%s\" tvg-logo=\"%s\" group-title=\"%s\", %s\n%s\n", tvgID, tvgName, logo, ch.Genre, title, link)
-        }
-        return
-    }
+			writeExtInf(w, title, ch.Genre, link)
+		}
+		return
+	}
 
-    // Treat anything else at root as a channel request
-    cr, err := s.getContentRequest(w, r, "/")
-    if err != nil {
-        if err == errForbidden {
-            http.Error(w, "forbidden", http.StatusForbidden)
-            return
-        }
-        http.Error(w, "invalid request", http.StatusBadRequest)
-        return
-    }
+	// Treat anything else at root as a channel request
+	cr, err := s.getContentRequest(w, r, "/")
+	if err != nil {
+		if err == errForbidden {
+			http.Error(w, "forbidden", http.StatusForbidden)
+			return
+		}
+		http.Error(w, "invalid request", http.StatusBadRequest)
+		return
+	}
 
-    // Lock channel's mux
-    cr.ChannelRef.Mux.Lock()
+	// Lock channel's mux
+	cr.ChannelRef.Mux.Lock()
 
-    // Keep track on channel access time
-    if err = cr.ChannelRef.validate(); err != nil {
-        cr.ChannelRef.Mux.Unlock()
-        http.Error(w, "internal server error", http.StatusInternalServerError)
-        log.Printf("[ERROR] Channel validation failed for %s: %v", cr.Title, err)
-        return
-    }
+	// Keep track on channel access time
+	if err = cr.ChannelRef.validate(); err != nil {
+		cr.ChannelRef.Mux.Unlock()
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		log.Printf("[ERROR] Channel validation failed for %s: %v", cr.Title, err)
+		return
+	}
 
-    // Handle content
-    handleContent(cr)
+	// Handle content
+	handleContent(cr)
 }
