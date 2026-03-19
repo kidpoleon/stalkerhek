@@ -360,7 +360,6 @@ func StartProfileServices(p Profile) {
 	AppendProfileLog(p.ID, "Retrieving channels")
 	// Retrieve channels (soft timeout: 3 tries)
 	chs := map[string]*stalker.Channel{}
-	var rawChannelResponse []byte
 	{
 		const maxAttempts = 3
 		const perAttemptTimeout = 30 * time.Second
@@ -373,19 +372,17 @@ func StartProfileServices(p Profile) {
 			AppendProfileLog(p.ID, fmt.Sprintf("Retrieve channels attempt %d/%d", attempt, maxAttempts))
 			type result struct {
 				chs map[string]*stalker.Channel
-				raw []byte
 				err error
 			}
 			resCh := make(chan result, 1)
 			go func() {
-				c, raw, err := cfg.Portal.RetrieveChannels()
-				resCh <- result{chs: c, raw: raw, err: err}
+				c, err := cfg.Portal.RetrieveChannels()
+				resCh <- result{chs: c, err: err}
 			}()
 			select {
 			case res := <-resCh:
 				if res.err == nil {
 					chs = res.chs
-					rawChannelResponse = res.raw
 					lastErr = nil
 					attempt = maxAttempts
 					break
@@ -423,25 +420,6 @@ func StartProfileServices(p Profile) {
 	}
 	SetProfileSuccess(p.ID, p.Name, len(chs), "", "", true)
 	AppendProfileLog(p.ID, fmt.Sprintf("Retrieved %d channels", len(chs)))
-
-	// Log the first 24 lines of the raw portal channel response so the operator
-	// can verify what the portal actually returned.
-	{
-		const maxLines = 24
-		AppendProfileLog(p.ID, fmt.Sprintf("=== %s: raw channel response (first %d lines) ===", p.Name, maxLines))
-		if len(rawChannelResponse) == 0 {
-			AppendProfileLog(p.ID, "  (no data)")
-		} else {
-			lines := strings.SplitN(string(rawChannelResponse), "\n", maxLines+1)
-			if len(lines) > maxLines {
-				lines = lines[:maxLines]
-			}
-			for i, line := range lines {
-				AppendProfileLog(p.ID, fmt.Sprintf("  %3d | %s", i+1, line))
-			}
-		}
-		AppendProfileLog(p.ID, fmt.Sprintf("=== end of sample (%d bytes total) ===", len(rawChannelResponse)))
-	}
 
 	if shouldStop("before starting services") {
 		return
