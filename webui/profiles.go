@@ -424,25 +424,6 @@ func StartProfileServices(p Profile) {
 	SetProfileSuccess(p.ID, p.Name, len(chs), "", "", true)
 	AppendProfileLog(p.ID, fmt.Sprintf("Retrieved %d channels", len(chs)))
 
-	// Log the first 24 lines of the raw portal channel response so the operator
-	// can verify what the portal actually returned.
-	{
-		const maxLines = 24
-		AppendProfileLog(p.ID, fmt.Sprintf("=== %s: raw channel response (first %d lines) ===", p.Name, maxLines))
-		if len(rawChannelResponse) == 0 {
-			AppendProfileLog(p.ID, "  (no data)")
-		} else {
-			lines := strings.SplitN(string(rawChannelResponse), "\n", maxLines+1)
-			if len(lines) > maxLines {
-				lines = lines[:maxLines]
-			}
-			for i, line := range lines {
-				AppendProfileLog(p.ID, fmt.Sprintf("  %3d | %s", i+1, line))
-			}
-		}
-		AppendProfileLog(p.ID, fmt.Sprintf("=== end of sample (%d bytes total) ===", len(rawChannelResponse)))
-	}
-
 	if shouldStop("before starting services") {
 		return
 	}
