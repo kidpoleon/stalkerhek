@@ -571,6 +571,9 @@ func RegisterProfileHandlers(mux *http.ServeMux, onStart func()) {
 			http.Error(w, "portal and mac are required", http.StatusBadRequest)
 			return
 		}
+		// Treat "0" or blank identically — both mean "not configured".
+		if hlsStr == "0" { hlsStr = "" }
+		if proxyStr == "0" { proxyStr = "" }
 		var hlsPort, proxyPort int
 		if hlsStr != "" {
 			v, err := strconv.Atoi(hlsStr)
