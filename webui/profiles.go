@@ -1220,8 +1220,8 @@ func RegisterProfileHandlers(mux *http.ServeMux, onStart func()) {
       const portalOk = /^https?:\/\//i.test(v) && /(portal|load)\.php(\?.*)?$/i.test(v);
       if(!portalOk){ portalErr.style.display='block'; ok=false } else portalErr.style.display='none';
       if(!macRe.test(m)){ macErr.style.display='block'; ok=false } else macErr.style.display='none';
-      const hlsVal=(document.getElementById('hls_port').value||'').trim();
-      const proxyVal=(document.getElementById('proxy_port').value||'').trim();
+      const hlsVal=(document.getElementById('hls_port').value||'').trim().replace(/^0+$/,'');
+      const proxyVal=(document.getElementById('proxy_port').value||'').trim().replace(/^0+$/,'');
       if(!hlsVal && !proxyVal){ portErr.style.display='block'; ok=false } else portErr.style.display='none';
       return ok;
     }
@@ -1300,8 +1300,8 @@ func RegisterProfileHandlers(mux *http.ServeMux, onStart func()) {
       document.getElementById('name').value=name;
       document.getElementById('portal').value=portal;
       document.getElementById('mac').value=mac;
-      document.getElementById('hls_port').value=hls;
-      document.getElementById('proxy_port').value=proxy;
+      document.getElementById('hls_port').value = hls === '0' ? '' : hls;
+      document.getElementById('proxy_port').value = proxy === '0' ? '' : proxy;
       document.getElementById('model').value=card.getAttribute('data-model')||'';
       document.getElementById('serial_number').value=card.getAttribute('data-serial')||'';
       document.getElementById('device_id').value=card.getAttribute('data-deviceid')||'';
@@ -1383,8 +1383,10 @@ func RegisterProfileHandlers(mux *http.ServeMux, onStart func()) {
 		document.getElementById('qe_name').value = card.getAttribute('data-name')||'';
 		document.getElementById('qe_portal').value = card.getAttribute('data-portal')||'';
 		document.getElementById('qe_mac').value = card.getAttribute('data-mac')||'';
-		document.getElementById('qe_hls_port').value = card.getAttribute('data-hls')||'';
-		document.getElementById('qe_proxy_port').value = card.getAttribute('data-proxy')||'';
+		const qeHls = card.getAttribute('data-hls')||'';
+		const qeProxy = card.getAttribute('data-proxy')||'';
+		document.getElementById('qe_hls_port').value = qeHls === '0' ? '' : qeHls;
+		document.getElementById('qe_proxy_port').value = qeProxy === '0' ? '' : qeProxy;
 		document.getElementById('qe_username').value = card.getAttribute('data-username')||'';
 		document.getElementById('qe_password').value = card.getAttribute('data-password')||'';
 		document.getElementById('qe_model').value = card.getAttribute('data-model')||'';
