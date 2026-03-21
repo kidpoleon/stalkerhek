@@ -267,15 +267,24 @@ func StartProfileServices(p Profile) {
 		SetProfileError(p.ID, p.Name, "Invalid MAC format. Tip: it must be 6 hex pairs like 00:1A:79:AA:BB:CC.")
 		return
 	}
-	if err := checkPortAvailable(p.HlsPort); err != nil {
-		AppendProfileLog(p.ID, "HLS port unavailable")
-		SetProfileError(p.ID, p.Name, "HLS port is unavailable. Choose a different HLS port.")
+	if p.HlsPort == 0 && p.ProxyPort == 0 {
+		AppendProfileLog(p.ID, "At least one port required")
+		SetProfileError(p.ID, p.Name, "At least one port (HLS or Proxy) must be set.")
 		return
 	}
-	if err := checkPortAvailable(p.ProxyPort); err != nil {
-		AppendProfileLog(p.ID, "Proxy port unavailable")
-		SetProfileError(p.ID, p.Name, "Proxy port is unavailable. Choose a different Proxy port.")
-		return
+	if p.HlsPort > 0 {
+		if err := checkPortAvailable(p.HlsPort); err != nil {
+			AppendProfileLog(p.ID, "HLS port unavailable")
+			SetProfileError(p.ID, p.Name, "HLS port is unavailable. Choose a different HLS port.")
+			return
+		}
+	}
+	if p.ProxyPort > 0 {
+		if err := checkPortAvailable(p.ProxyPort); err != nil {
+			AppendProfileLog(p.ID, "Proxy port unavailable")
+			SetProfileError(p.ID, p.Name, "Proxy port is unavailable. Choose a different Proxy port.")
+			return
+		}
 	}
 
 	log.Printf("[PROFILE %s] Starting services...", p.Name)
@@ -303,12 +312,12 @@ func StartProfileServices(p Profile) {
 		HLS: struct {
 			Enabled bool   `yaml:"enabled"`
 			Bind    string `yaml:"bind"`
-		}{Enabled: true, Bind: fmt.Sprintf("0.0.0.0:%d", p.HlsPort)},
+		}{Enabled: p.HlsPort > 0, Bind: fmt.Sprintf("0.0.0.0:%d", p.HlsPort)},
 		Proxy: struct {
 			Enabled bool   `yaml:"enabled"`
 			Bind    string `yaml:"bind"`
 			Rewrite bool   `yaml:"rewrite"`
-		}{Enabled: true, Bind: fmt.Sprintf("0.0.0.0:%d", p.ProxyPort), Rewrite: true},
+		}{Enabled: p.ProxyPort > 0, Bind: fmt.Sprintf("0.0.0.0:%d", p.ProxyPort), Rewrite: p.ProxyPort > 0 && p.HlsPort > 0},
 	}
 	// Authenticate (soft timeout: 3 tries)
 	{
@@ -558,14 +567,29 @@ func RegisterProfileHandlers(mux *http.ServeMux, onStart func()) {
 		password := strings.TrimSpace(r.FormValue("password"))
 		watchdogStr := strings.TrimSpace(r.FormValue("watchdog_time"))
 		watchdog, _ := strconv.Atoi(watchdogStr)
-		if portal == "" || mac == "" || hlsStr == "" || proxyStr == "" {
-			http.Error(w, "portal, mac, hls_port, proxy_port are required", http.StatusBadRequest)
+		if portal == "" || mac == "" {
+			http.Error(w, "portal and mac are required", http.StatusBadRequest)
 			return
 		}
-		hlsPort, err1 := strconv.Atoi(hlsStr)
-		proxyPort, err2 := strconv.Atoi(proxyStr)
-		if err1 != nil || err2 != nil || hlsPort <= 0 || proxyPort <= 0 {
-			http.Error(w, "invalid ports", http.StatusBadRequest)
+		var hlsPort, proxyPort int
+		if hlsStr != "" {
+			v, err := strconv.Atoi(hlsStr)
+			if err != nil || v <= 0 {
+				http.Error(w, "invalid hls_port", http.StatusBadRequest)
+				return
+			}
+			hlsPort = v
+		}
+		if proxyStr != "" {
+			v, err := strconv.Atoi(proxyStr)
+			if err != nil || v <= 0 {
+				http.Error(w, "invalid proxy_port", http.StatusBadRequest)
+				return
+			}
+			proxyPort = v
+		}
+		if hlsPort == 0 && proxyPort == 0 {
+			http.Error(w, "at least one of hls_port or proxy_port is required", http.StatusBadRequest)
 			return
 		}
 		if !isValidMAC(mac) {
@@ -865,14 +889,15 @@ func RegisterProfileHandlers(mux *http.ServeMux, onStart func()) {
 
           <div class="row two">
             <div>
-              <label for="hls_port">HLS Port</label>
-              <input id="hls_port" name="hls_port" required inputmode="numeric" title="This is the port your HLS players will use" />
+              <label for="hls_port">HLS Port <span style="color:var(--muted);font-size:.85em">(optional)</span></label>
+              <input id="hls_port" name="hls_port" inputmode="numeric" title="Port for HLS playlist and stream delivery. Leave blank if not needed." />
             </div>
             <div>
-              <label for="proxy_port">Proxy Port</label>
-              <input id="proxy_port" name="proxy_port" required inputmode="numeric" title="This is used by STB-style apps (optional for most users)" />
+              <label for="proxy_port">Proxy Port <span style="color:var(--muted);font-size:.85em">(optional)</span></label>
+              <input id="proxy_port" name="proxy_port" inputmode="numeric" title="Port for STB-style proxy. Leave blank if not needed." />
             </div>
           </div>
+          <div id="portErr" class="err">At least one port (HLS or Proxy) is required.</div>
 
           <details id="advancedDetails" style="margin-top:12px;border:1px solid var(--border);border-radius:12px;padding:12px;background:rgba(13,20,16,.55)">
             <summary style="cursor:pointer;color:#7fba7f;font-size:.95em;user-select:none;display:flex;align-items:center;gap:8px">
@@ -977,8 +1002,8 @@ func RegisterProfileHandlers(mux *http.ServeMux, onStart func()) {
                 <button class="danger" type="submit" title="Delete this profile"><i class="fa-solid fa-trash"></i> <span class="btntext">Delete</span></button>
               </form>
               <div class="spacer"></div>
-              <a class="ghost linkbtn" id="hls-{{.ID}}" href="#" data-copy="http://{{$.Host}}:{{.HlsPort}}/" title="Copy HLS endpoint"><i class="fa-solid fa-film"></i> <span class="btntext">HLS</span></a>
-              <a class="ghost linkbtn proxybtn" id="pxy-{{.ID}}" href="#" data-copy="http://{{$.Host}}:{{.ProxyPort}}/" title="Copy Proxy endpoint"><i class="fa-solid fa-right-left"></i> <span class="btntext">Proxy</span></a>
+              {{if .HlsPort}}<a class="ghost linkbtn" id="hls-{{.ID}}" href="#" data-copy="http://{{$.Host}}:{{.HlsPort}}/" title="Copy HLS endpoint"><i class="fa-solid fa-film"></i> <span class="btntext">HLS</span></a>{{end}}
+              {{if .ProxyPort}}<a class="ghost linkbtn proxybtn" id="pxy-{{.ID}}" href="#" data-copy="http://{{$.Host}}:{{.ProxyPort}}/" title="Copy Proxy endpoint"><i class="fa-solid fa-right-left"></i> <span class="btntext">Proxy</span></a>{{end}}
               <a class="ghost linkbtn" href="/filters?id={{.ID}}" target="_blank" rel="noopener" title="Filter channels/genres for this profile"><i class="fa-solid fa-filter"></i> <span class="btntext">Filters</span></a>
             </div>
             <div class="meta" id="meta-{{.ID}}" title="Detailed status and channel count"></div>
@@ -1186,6 +1211,7 @@ func RegisterProfileHandlers(mux *http.ServeMux, onStart func()) {
       const mac=document.getElementById('mac');
       const portalErr=document.getElementById('portalErr');
       const macErr=document.getElementById('macErr');
+      const portErr=document.getElementById('portErr');
       let ok=true;
       const v=normalizePortal(portal.value||'');
       portal.value=v;
@@ -1194,6 +1220,9 @@ func RegisterProfileHandlers(mux *http.ServeMux, onStart func()) {
       const portalOk = /^https?:\/\//i.test(v) && /(portal|load)\.php(\?.*)?$/i.test(v);
       if(!portalOk){ portalErr.style.display='block'; ok=false } else portalErr.style.display='none';
       if(!macRe.test(m)){ macErr.style.display='block'; ok=false } else macErr.style.display='none';
+      const hlsVal=(document.getElementById('hls_port').value||'').trim();
+      const proxyVal=(document.getElementById('proxy_port').value||'').trim();
+      if(!hlsVal && !proxyVal){ portErr.style.display='block'; ok=false } else portErr.style.display='none';
       return ok;
     }
     document.getElementById('addForm').addEventListener('submit', (e)=>{
