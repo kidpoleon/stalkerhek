@@ -68,6 +68,9 @@ func main() {
 		}
 	}
 
+    // ↓ ADD THIS LINE
+	webui.StartStreamWatchdog(ctx)
+	
 	// Wait for shutdown signal
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
