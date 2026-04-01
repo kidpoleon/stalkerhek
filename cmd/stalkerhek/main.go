@@ -57,20 +57,22 @@ func main() {
 	log.Println("Starting WebUI on :4400 ...")
 	go webui.StartWithContext(ctx, c, make(chan struct{})) // ready ignored
 
-	// Immediately start all saved profiles in parallel
+	// Immediately start all saved profiles in parallel, with automatic
+	// retry so that dependency-not-ready failures (e.g. gluetun DNS)
+	// recover without manual intervention.
 	profiles := webui.ListProfiles()
 	if len(profiles) == 0 {
 		log.Println("No profiles saved yet. Add profiles via the WebUI.")
 	} else {
 		log.Printf("Starting %d saved profile(s) in parallel...", len(profiles))
 		for _, p := range profiles {
-			go webui.StartProfileServices(p) // use the new function in webui
+			webui.StartProfileWithRetry(ctx, p)
 		}
 	}
 
-    // ↓ ADD THIS LINE
+	// Start stream watchdog — probes running profiles and revives dead streams.
 	webui.StartStreamWatchdog(ctx)
-	
+
 	// Wait for shutdown signal
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
