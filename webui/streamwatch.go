@@ -1,11 +1,19 @@
 package webui
 
-// streamwatch.go — lightweight per-profile stream watchdog.
+// streamwatch.go — lightweight per-profile stream watchdog + startup retry.
 //
-// Probes each running profile's HLS/Proxy port via a plain TCP dial
-// to localhost — completely invisible to the upstream portal. Only
-// after WATCHDOG_MIN_FAILURES consecutive missed probes does it
-// attempt revival via StartProfileServices (which hits the portal).
+// Two concerns handled here:
+//
+// 1. STARTUP RETRY (StartProfileWithRetry)
+//    Wraps StartProfileServices with a backoff retry loop. Use this at
+//    process startup so that dependency-not-ready failures (e.g. gluetun
+//    DNS not yet available) are retried automatically.
+//
+// 2. STREAM WATCHDOG (StartStreamWatchdog)
+//    Probes each running profile's HLS/Proxy port via a plain TCP dial to
+//    localhost — completely invisible to the upstream portal. Only after
+//    wdMinFailures consecutive missed probes does it attempt revival via
+//    StartProfileServices (which hits the portal).
 //
 // Only one environment variable is exposed:
 //
@@ -26,13 +34,17 @@ import (
 )
 
 const (
+	// Stream watchdog constants
 	wdStartupGrace = 120 * time.Second // wait after process start before any probing
 	wdPollInterval = 60 * time.Second  // how often to probe all profiles
 	wdProbeTimeout = 3 * time.Second   // TCP dial timeout per probe
-	wdBaseDelay    = 15 * time.Second  // first backoff delay before revival attempt 1
+	wdBaseDelay    = 15 * time.Second  // first backoff delay (also used for startup retry)
 	wdMaxDelay     = 5 * time.Minute   // backoff ceiling
 	wdMinFailures  = 2                 // consecutive missed probes required before acting
 	wdDefaultMax   = 5                 // default WATCHDOG_MAX_ATTEMPTS
+
+	// Startup retry constants
+	wdStartupRetryLimit = 10 // max startup attempts before giving up
 )
 
 func watchdogMaxAttempts() int {
@@ -74,6 +86,43 @@ func wdReset(id int) {
 	wdMu.Lock()
 	delete(wdStates, id)
 	wdMu.Unlock()
+}
+
+// StartProfileWithRetry wraps StartProfileServices with a backoff retry loop.
+// Use this instead of go StartProfileServices(p) at process startup so that
+// dependency-not-ready failures (e.g. gluetun DNS) are retried automatically.
+func StartProfileWithRetry(ctx context.Context, p Profile) {
+	go func() {
+		for attempt := 1; attempt <= wdStartupRetryLimit; attempt++ {
+			if ctx.Err() != nil {
+				return
+			}
+			StartProfileServices(p)
+			// RegisterRunner is only called after successful auth + port bind,
+			// so IsRunning is the correct signal that startup succeeded.
+			if IsRunning(p.ID) {
+				return
+			}
+			if attempt >= wdStartupRetryLimit {
+				log.Printf("[watchdog] profile %d (%s): startup failed after %d attempts, giving up",
+					p.ID, p.Name, wdStartupRetryLimit)
+				AppendProfileLog(p.ID, fmt.Sprintf(
+					"[watchdog] startup failed after %d attempts — restart manually", wdStartupRetryLimit))
+				return
+			}
+			delay := wdBackoff(attempt - 1)
+			log.Printf("[watchdog] profile %d (%s): startup attempt %d/%d failed, retrying in %s",
+				p.ID, p.Name, attempt, wdStartupRetryLimit, delay)
+			AppendProfileLog(p.ID, fmt.Sprintf(
+				"[watchdog] startup attempt %d/%d failed, retrying in %s",
+				attempt, wdStartupRetryLimit, delay))
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(delay):
+			}
+		}
+	}()
 }
 
 // StartStreamWatchdog starts the background watchdog goroutine.
