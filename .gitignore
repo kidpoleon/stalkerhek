@@ -6,6 +6,7 @@
 /build/
 /stalkerhek
 /stalkerhek.exe
+/stalkerhek-test.exe
 
 *.exe
 *.exe~
@@ -26,6 +27,7 @@ coverage.*
 ################
 /go.work
 /go.work.sum
+/vendor/
 
 ############################
 # Runtime state / secrets  #
@@ -36,6 +38,7 @@ filters.json
 auth.json
 *.json.bak
 *.json.tmp
+*.local.json
 
 data/
 /data/
@@ -69,3 +72,9 @@ Thumbs.db
 ########################
 .cache/
 .tmp/
+
+########################
+# Local-only scripts    #
+########################
+/scripts/*.local.*
+/scripts/*.secret.*

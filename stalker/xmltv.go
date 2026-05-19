@@ -17,7 +17,11 @@ type XMLTVOptions struct {
 }
 
 // BuildXMLTV generates an XMLTV document for the given channel map.
-func BuildXMLTV(channels map[string]*Channel, opts XMLTVOptions) ([]byte, error) {
+// Programme times use loc when non-nil (portal timezone).
+func BuildXMLTV(channels map[string]*Channel, opts XMLTVOptions, loc *time.Location) ([]byte, error) {
+	if loc == nil {
+		loc = time.UTC
+	}
 	if opts.EPGSize <= 0 {
 		opts.EPGSize = 4
 	}
@@ -73,10 +77,12 @@ func BuildXMLTV(channels map[string]*Channel, opts XMLTVOptions) ([]byte, error)
 			if stop.IsZero() {
 				stop = p.Start.Add(30 * time.Minute)
 			}
+			start := p.Start.In(loc)
+			stopT := stop.In(loc)
 			doc.Programmes = append(doc.Programmes, xmlProgramme{
 				Channel: id,
-				Start:   p.Start.Format("20060102150405 -0700"),
-				Stop:    stop.Format("20060102150405 -0700"),
+				Start:   start.Format("20060102150405 -0700"),
+				Stop:    stopT.Format("20060102150405 -0700"),
 				Title:   p.Title,
 				Desc:    p.Description,
 				Category:p.Category,
@@ -120,5 +126,5 @@ const XMLTVContentType = "application/xml; charset=utf-8"
 
 // FormatXMLTVURL builds the default XMLTV URL for a profile on the WebUI host.
 func FormatXMLTVURL(scheme, host string, profileID int) string {
-	return fmt.Sprintf("%s://%s/epg/%d/xmltv.xml", scheme, host, profileID)
+	return fmt.Sprintf("%s://%s/epg/%d/xmltv.xml?programs=1&limit=500", scheme, host, profileID)
 }

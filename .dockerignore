@@ -11,9 +11,11 @@
 profiles.json
 filters.json
 auth.json
-data/
 *.json.bak
+*.json.tmp
+*.local.json
 
+data/
 .env
 .env.*
 *.env
@@ -38,6 +40,7 @@ build/
 
 stalkerhek
 stalkerhek.exe
+stalkerhek-test.exe
 *.exe
 *.exe~
 *.dll
@@ -47,6 +50,14 @@ stalkerhek.exe
 *.out
 
 ########################
+# Docs not needed in    #
+# runtime image build   #
+########################
+CHANGELOG.md
+SECURITY.md
+scripts/
+
+########################
 # Editor / OS artifacts #
 ########################
 .vscode/
@@ -54,5 +65,4 @@ stalkerhek.exe
 .DS_Store
 Thumbs.db
 
-# Local-only docs or notes (if added later)
 *.local.md

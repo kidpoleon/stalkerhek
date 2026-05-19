@@ -152,7 +152,10 @@ func AuthMiddleware(next http.Handler) http.Handler {
 		publicPaths := []string{"/login", "/register", "/account", "/forgot-password", "/reset-password",
 			"/api/login", "/api/register", "/api/forgot-password", "/api/reset-password",
 			"/api/auth/status", "/health", "/healthz", "/api/trusted-subnets", "/assets/banner.png"}
-		if strings.HasPrefix(r.URL.Path, "/epg/") || strings.HasPrefix(r.URL.Path, "/vod/") {
+		if strings.HasPrefix(r.URL.Path, "/epg/") || strings.HasPrefix(r.URL.Path, "/vod/") ||
+			strings.HasPrefix(r.URL.Path, "/xtream/") || strings.HasPrefix(r.URL.Path, "/movie/") ||
+			strings.HasPrefix(r.URL.Path, "/series/") || strings.HasPrefix(r.URL.Path, "/live/") ||
+			r.URL.Path == "/player_api.php" || r.URL.Path == "/panel_api.php" {
 			next.ServeHTTP(w, r)
 			return
 		}

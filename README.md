@@ -105,6 +105,8 @@ docker run -d \
   --network host \
   -v ~/stalkerhek/data:/data \
   -e STALKERHEK_PROFILES_FILE=/data/profiles.json \
+  -e STALKERHEK_AUTH_FILE=/data/auth.json \
+  -e STALKERHEK_FILTERS_FILE=/data/filters.json \
   kidpoleon/stalkerhek:main
 ```
 
@@ -286,17 +288,17 @@ Note: Filters UI is intentionally **desktop-focused**.
 
 ## EPG and VOD
 
-When a profile is **running**, Stalkerhek exposes guides and on-demand content from your portal (if the provider enables them).
+When a profile is **running**, Stalkerhek scrapes EPG and VOD from your Stalker portal (same APIs as MAG/STB clients). Programme times follow the profile **Time Zone** (and the portal `timezone` cookie).
 
-| Feature | URL (replace host / profile id) |
-|---------|----------------------------------|
-| XMLTV EPG | `http://<host>:4400/epg/<profileId>/xmltv.xml` |
-| Portal EPG + programmes | `.../xmltv.xml?programs=1&limit=200` |
-| Custom EPG (per profile) | Set **EPG guide URL** in Quick Edit → same XMLTV endpoint proxies your `.xml` / `.xml.gz` |
-| VOD sample M3U | `http://<host>:4400/vod/<profileId>/playlist.m3u` |
-| VOD API | `GET /api/vod/<profileId>/categories` and `/list?category=...` |
+- **Live EPG**: HLS playlists include `url-tvg` / `x-tvg-url` pointing at `http://<host>:4400/epg/<profileId>/xmltv.xml` (programmes included by default). If the portal embeds an XMLTV URL in credentials, that guide is used automatically; you can still override with **EPG guide URL** in Quick Edit.
+- **VOD (movies + series)**: Use **Xtream Codes** in your IPTV app:
+  - Server: `http://<host>:4400` (port **4400**, no path)
+  - Username: your profile **MAC** address (e.g. `00:1A:79:B7:44:14`)
+  - Password: `stalkerhek`
+  - Movies and TV series (seasons/episodes) are browsable; playback uses portal `play/movie.php` links (seekable on-demand).
+- **M3U VOD** (optional): `http://<host>:4400/vod/<profileId>/playlist.m3u` lists movies and episodes grouped by category.
 
-Live HLS playlists (`http://<host>:<hlsPort>/iptv/`) include `url-tvg` pointing at the XMLTV URL above.
+Live HLS: `http://<host>:<hlsPort>/iptv/`
 
 ## Advanced settings (stability)
 

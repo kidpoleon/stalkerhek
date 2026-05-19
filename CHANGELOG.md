@@ -7,6 +7,54 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2026-05-19] — EPG, VOD & Xtream for IPTV apps
+
+### Added
+
+- **Xtream Codes API** (TiviMate, IPTV Smarters, etc.)
+  - `GET /player_api.php` and `GET /panel_api.php` on port **4400** (profile resolved by **MAC** username)
+  - Standard playback paths: `/movie/`, `/series/`, `/live/` → portal `create_link` / `play/movie.php`
+  - Password: `stalkerhek` (documented in README)
+  - Live, VOD categories, movies, series, seasons/episodes, and short EPG actions
+
+- **EPG improvements**
+  - Programme times use profile **timezone** (`stalker/timezone.go`)
+  - Auto-detect embedded XMLTV URL from portal `get_profile` (`stalker/portal_meta.go`)
+  - XMLTV includes programmes by default (`?programs=1&limit=500`); cached ~10 minutes
+  - HLS playlists point at full programme guide via `url-tvg`
+
+- **VOD improvements** (aligned with [IPTV-MAC-STALKER-PLAYER-BY-MY-1](https://github.com/Cyogenus/IPTV-MAC-STALKER-PLAYER-BY-MY-1))
+  - **0-based** Stalker pagination (`p=0` first page) and multi-page fetch per category
+  - Separate **Movies** vs **Series** categories (`type=vod` / `type=series`)
+  - Seasons and episodes via `get_ordered_list` (`movie_id`, `season_id`)
+  - Seekable playback URLs with `play_token` and `type=movie|series`
+  - Full VOD M3U uses Xtream-style `/movie/` and `/series/` links
+
+- **WebUI**
+  - `webui/http_request.go` — shared `requestSchemeHost`, `writeJSON`, proxy-aware URLs
+  - `webui/xtream.go`, `webui/portal_meta_store.go`
+  - Public routes for EPG, VOD, Xtream, and playback (no WebUI login required for IPTV clients)
+
+### Changed
+
+- Removed **EPG** and **VOD** copy-link buttons from Manage (live uses HLS; VOD/EPG use Xtream on port 4400)
+- README — Xtream setup: server `http://<host>:4400`, MAC as username
+- VOD API list endpoint uses **0-based** `page` query parameter
+
+### Fixed
+
+- VOD lists were empty when the first Stalker page was skipped (`p=1` instead of `p=0`)
+- IPTV apps ignoring `direct_source`; playback now uses standard Xtream URL paths
+- Build error: undefined `requestSchemeHost` after EPG/VOD refactor
+- Safer nil/empty checks on VOD playlist generation and Xtream play redirects
+- Stream base URL derivation for portals under `/c/` paths (e.g. `line.smootvone.vip/c/portal.php`)
+
+### Security
+
+- `.gitignore` / `.dockerignore` — reinforced exclusions for credentials, local JSON, and binaries
+
+---
+
 ## [2025-05-19]
 
 ### Added
@@ -87,7 +135,7 @@ Special thanks to **[zedstate](https://github.com/zedstate)** for their pull req
 
 - License updated to **GNU GPL v3**
 - Contact: **kidpoleon@proton.me**
-- Dashboard profile row: **EPG** and **VOD** copy-link buttons
+- Dashboard profile row: **EPG** and **VOD** copy-link buttons *(removed in 2026-05-19; use Xtream instead)*
 
 ### Fixed
 
@@ -98,8 +146,7 @@ Special thanks to **[zedstate](https://github.com/zedstate)** for their pull req
 ### Notes
 
 - EPG program data depends on your provider; use a custom XMLTV URL if the portal guide is empty or slow.
-- VOD sample playlist loads the first pages of up to five categories; full libraries use the JSON API.
-- Large channel lists: XMLTV defaults to channel definitions; add `?programs=1&limit=200` for portal programme data (capped for performance).
+- For full VOD in IPTV apps, use **Xtream** on port 4400 (see README and [2026-05-19] entry).
 
 ---
 

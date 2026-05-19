@@ -330,6 +330,17 @@ func StartProfileServices(p Profile) {
 				if err == nil {
 					lastErr = nil
 					RegisterProfilePortal(p.ID, cfg.Portal)
+					go func(portal *stalker.Portal, profileID int) {
+						meta, err := portal.FetchPortalMeta()
+						if err != nil {
+							return
+						}
+						SetProfileMeta(profileID, meta)
+						if meta != nil && meta.EPGURL != "" {
+							AppendProfileLog(profileID, "Portal embedded EPG guide detected")
+							InvalidatePortalXMLTVCache(profileID)
+						}
+					}(cfg.Portal, p.ID)
 					attempt = maxAttempts
 					break
 				}
@@ -478,6 +489,8 @@ func StartProfileServices(p Profile) {
 			close(done)
 			ClearProfileChannels(p.ID)
 			ClearProfilePortal(p.ID)
+			ClearProfileMeta(p.ID)
+			InvalidatePortalXMLTVCache(p.ID)
 		}
 	}
 
@@ -948,7 +961,7 @@ func RegisterProfileHandlers(mux *http.ServeMux, onStart func()) {
             <button class="primary" id="saveBtn" type="submit" title="Saves profile to the list below"><i class="fa-regular fa-floppy-disk"></i> <span class="btntext">Save Profile</span></button>
             <button class="ghost" type="button" id="cancelEdit" style="display:none" title="Cancel editing and reset the form"><i class="fa-solid fa-xmark"></i> <span class="btntext">Cancel Edit</span></button>
           </div>
-          <div class="hint" id="formHint">Tip: After saving, it will start automatically. When it's ready, you'll see the copy buttons in Manage.</div>
+          <div class="hint" id="formHint">Tip: After saving, it will start automatically. Use HLS for live TV; configure Xtream in your IPTV app for VOD and EPG (see README).</div>
         </form>
       </div>
 
@@ -991,8 +1004,6 @@ func RegisterProfileHandlers(mux *http.ServeMux, onStart func()) {
               <a class="ghost linkbtn" id="hls-{{.ID}}" href="#" data-copy="http://{{$.Host}}:{{.HlsPort}}/" title="Copy HLS endpoint"><i class="fa-solid fa-film"></i> <span class="btntext">HLS</span></a>
               <a class="ghost linkbtn proxybtn" id="pxy-{{.ID}}" href="#" data-copy="http://{{$.Host}}:{{.ProxyPort}}/" title="Copy Proxy endpoint"><i class="fa-solid fa-right-left"></i> <span class="btntext">Proxy</span></a>
               <a class="ghost linkbtn" href="/filters?id={{.ID}}" target="_blank" rel="noopener" title="Filter channels/genres for this profile"><i class="fa-solid fa-filter"></i> <span class="btntext">Filters</span></a>
-              <a class="ghost linkbtn" href="#" data-copy="http://{{$.Host}}:4400/epg/{{.ID}}/xmltv.xml" title="Copy XMLTV EPG URL for IPTV players"><i class="fa-solid fa-calendar-days"></i> <span class="btntext">EPG</span></a>
-              <a class="ghost linkbtn" href="#" data-copy="http://{{$.Host}}:4400/vod/{{.ID}}/playlist.m3u" title="Copy VOD playlist (sample categories)"><i class="fa-solid fa-clapperboard"></i> <span class="btntext">VOD</span></a>
             </div>
             <div class="meta" id="meta-{{.ID}}" title="Detailed status and channel count"></div>
           </div>

@@ -92,6 +92,7 @@ func StartWithContext(ctx context.Context, cfg *stalker.Config, ready chan struc
     RegisterStatusHandlers(mux)
     RegisterHealthHandlers(mux)
     RegisterEPGVODHandlers(mux)
+    RegisterXtreamHandlers(mux)
 
     // mount per-profile status endpoints (verify/stop/delete and JSON feed)
     RegisterProfileStatusHandlers(mux)

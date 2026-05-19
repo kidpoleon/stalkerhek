@@ -39,7 +39,7 @@ func (c *Channel) GetShortEPG(size int) ([]EPGProgram, error) {
 	if err != nil {
 		return nil, err
 	}
-	return parseEPGResponse(content)
+	return c.parseEPGResponse(content)
 }
 
 // GetEPGInfo fetches EPG via get_epg_info (fallback when get_short_epg is empty).
@@ -56,7 +56,27 @@ func (c *Channel) GetEPGInfo() ([]EPGProgram, error) {
 	if err != nil {
 		return nil, err
 	}
-	return parseEPGResponse(content)
+	return c.parseEPGResponse(content)
+}
+
+func (c *Channel) parseEPGResponse(content []byte) ([]EPGProgram, error) {
+	loc := c.epgLocation()
+	type tmpStruct struct {
+		Js json.RawMessage `json:"js"`
+	}
+	var tmp tmpStruct
+	if err := json.Unmarshal(content, &tmp); err != nil {
+		return nil, fmt.Errorf("epg: invalid response: %w", err)
+	}
+	rawItems := extractEPGItems(tmp.Js)
+	out := make([]EPGProgram, 0, len(rawItems))
+	for _, it := range rawItems {
+		p, ok := normalizeEPGItemIn(loc, it)
+		if ok {
+			out = append(out, p)
+		}
+	}
+	return out, nil
 }
 
 func parseEPGResponse(content []byte) ([]EPGProgram, error) {
@@ -70,7 +90,7 @@ func parseEPGResponse(content []byte) ([]EPGProgram, error) {
 	rawItems := extractEPGItems(tmp.Js)
 	out := make([]EPGProgram, 0, len(rawItems))
 	for _, it := range rawItems {
-		p, ok := normalizeEPGItem(it)
+		p, ok := normalizeEPGItemIn(time.UTC, it)
 		if ok {
 			out = append(out, p)
 		}
@@ -103,10 +123,10 @@ func extractEPGItems(js json.RawMessage) []map[string]interface{} {
 	return nil
 }
 
-func normalizeEPGItem(it map[string]interface{}) (EPGProgram, bool) {
+func normalizeEPGItemIn(loc *time.Location, it map[string]interface{}) (EPGProgram, bool) {
 	title := epgFirstString(it, "name", "title", "progname", "program")
-	start := epgTime(it, "start", "start_timestamp", "from", "time")
-	stop := epgTime(it, "end", "stop_timestamp", "to", "time_to")
+	start := epgTimeIn(loc, it, "start", "start_timestamp", "from", "time")
+	stop := epgTimeIn(loc, it, "end", "stop_timestamp", "to", "time_to")
 	if title == "" {
 		title = "—"
 	}
@@ -136,7 +156,14 @@ func epgFirstString(m map[string]interface{}, keys ...string) string {
 	return ""
 }
 
-func epgTime(m map[string]interface{}, keys ...string) time.Time {
+func (c *Channel) epgLocation() *time.Location {
+	if c != nil && c.Portal != nil {
+		return c.Portal.TimeLocation()
+	}
+	return time.UTC
+}
+
+func epgTimeIn(loc *time.Location, m map[string]interface{}, keys ...string) time.Time {
 	for _, k := range keys {
 		v, ok := m[k]
 		if !ok || v == nil {
@@ -144,18 +171,21 @@ func epgTime(m map[string]interface{}, keys ...string) time.Time {
 		}
 		switch t := v.(type) {
 		case float64:
-			return epochToTime(int64(t))
+			return epochInZone(int64(t), loc)
 		case json.Number:
 			if i, err := t.Int64(); err == nil {
-				return epochToTime(i)
+				return epochInZone(i, loc)
 			}
 		case string:
 			s := strings.TrimSpace(t)
 			if s == "" {
 				continue
 			}
+			if loc == nil {
+				loc = time.UTC
+			}
 			for _, layout := range []string{"2006-01-02 15:04:05", time.RFC3339} {
-				if dt, err := time.ParseInLocation(layout, s, time.Local); err == nil {
+				if dt, err := time.ParseInLocation(layout, s, loc); err == nil {
 					return dt
 				}
 			}
@@ -164,12 +194,6 @@ func epgTime(m map[string]interface{}, keys ...string) time.Time {
 	return time.Time{}
 }
 
-func epochToTime(ts int64) time.Time {
-	if ts > 10_000_000_000 {
-		ts = ts / 1000
-	}
-	if ts <= 0 {
-		return time.Time{}
-	}
-	return time.Unix(ts, 0).Local()
+func epgTime(m map[string]interface{}, keys ...string) time.Time {
+	return epgTimeIn(time.UTC, m, keys...)
 }
