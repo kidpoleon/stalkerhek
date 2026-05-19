@@ -151,7 +151,7 @@ func AuthMiddleware(next http.Handler) http.Handler {
 		// Skip auth for public endpoints
 		publicPaths := []string{"/login", "/register", "/account", "/forgot-password", "/reset-password",
 			"/api/login", "/api/register", "/api/forgot-password", "/api/reset-password",
-			"/api/auth/status", "/health", "/api/trusted-subnets"}
+			"/api/auth/status", "/health", "/healthz", "/api/trusted-subnets", "/assets/banner.png"}
 		for _, path := range publicPaths {
 			if r.URL.Path == path {
 				next.ServeHTTP(w, r)

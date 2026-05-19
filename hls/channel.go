@@ -2,11 +2,33 @@ package hls
 
 import (
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/kidpoleon/stalkerhek/stalker"
 )
 
+var (
+	hlsLinkTTL   atomic.Int64 // nanoseconds
+	mediaLinkTTL atomic.Int64
+)
+
+func init() {
+	SetChannelLinkTTL(180*time.Second, 45*time.Second)
+}
+
+// SetChannelLinkTTL controls how long a resolved upstream link is reused before
+// re-requesting create_link from the portal. Short TTLs cause visible hiccups.
+func SetChannelLinkTTL(hlsTTL, mediaTTL time.Duration) {
+	if hlsTTL < 30*time.Second {
+		hlsTTL = 30 * time.Second
+	}
+	if mediaTTL < 5*time.Second {
+		mediaTTL = 5 * time.Second
+	}
+	hlsLinkTTL.Store(int64(hlsTTL))
+	mediaLinkTTL.Store(int64(mediaTTL))
+}
 const (
 	linkTypeUnknown = 0 // default
 	linkTypeHLS     = 1
@@ -37,7 +59,8 @@ type Channel struct {
 
 	Logo *Logo // Reference to channel's logo
 
-	Genre string // TV channel genre. This field does not require synchronization
+	Genre    string // TV channel genre, title-cased. Used by filter UI display.
+	RawGenre string // Portal genre string, unmodified casing. Used for M3U8 output.
 }
 
 func (c *Channel) validate() error {
@@ -49,6 +72,8 @@ func (c *Channel) validate() error {
 
 		c.Link = newLink
 		c.LinkType = 0
+		c.HLSLink = ""
+		c.HLSLinkRoot = ""
 	}
 
 	c.lastAccess = time.Now()
@@ -56,16 +81,12 @@ func (c *Channel) validate() error {
 }
 
 func (c *Channel) isValid() bool {
-	// If channel has never been accessed
 	if c.lastAccess.IsZero() {
 		return false
 	}
-
-	// 30 seconds timout for HLS content
+	ttl := time.Duration(mediaLinkTTL.Load())
 	if c.LinkType == linkTypeHLS {
-		return time.Since(c.lastAccess).Seconds() <= 30
+		ttl = time.Duration(hlsLinkTTL.Load())
 	}
-
-	// 5 seconds for everything else
-	return time.Since(c.lastAccess).Seconds() <= 5
+	return time.Since(c.lastAccess) <= ttl
 }

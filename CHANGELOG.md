@@ -7,6 +7,63 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2025-05-19]
+
+### Added
+
+- **M3U8 / playlist quality** (inspired by community fixes from [zedstate](https://github.com/zedstate/stalkerhek))
+  - `stalker/normalize.go` — superscript stripping, genre/title cleanup for external players (VLC, Dispatcharr, Plex, etc.)
+  - `RawGenre()` on portal channels for faithful `group-title` output (no `strings.Title` mangling)
+  - Blank `tvg-id` and `tvg-logo` in playlists (Stalker CMD and relative logos break importers)
+  - Duplicate channel names deduplicated at playlist generation (first sorted entry wins)
+  - Playlist sorted by `group-title` then natural channel name (`CH 2` before `CH 10`)
+  - Shared `stalker.DeriveCategory()` for filters UI and playlist consistency
+
+- **Stability defaults applied on startup** (no manual save required)
+  - Playlist delay: **5** segments
+  - Upstream header timeout: **35s**
+  - Max idle connections per host: **128**
+  - HLS upstream link reuse: **180s** (reduces mid-playback re-auth hiccups)
+  - Media link reuse: **45s**
+
+- **Operations**
+  - Scheduled **24-hour service recycle** (`maintenance/`) — process exits cleanly; Docker `restart: unless-stopped` brings it back; `/data` config unchanged
+  - Instance logs retained up to **~2 days** / 8000 lines
+  - Tagged logging: `[SETTINGS]`, `[HLS]`, `[MAINTENANCE]`, `[PROFILE …]`
+  - `/health` and `/healthz` endpoints registered for Docker health checks
+  - Local dashboard banner at `/assets/banner.png` (`graphic/banner.png`)
+
+- **Docker**
+  - Image includes **ffmpeg** and **curl** (diagnostics / healthcheck)
+  - `graphic/` copied into image; `STALKERHEK_ROOT=/app`
+  - `docker-compose.yml` documents `STALKERHEK_RESTART_HOURS` and optional GPU (`/dev/dri`)
+
+### Changed
+
+- Filter API and channel cache use **natural sort**; categories sort with **Other** last
+- `docker-compose.yml` — `STALKERHEK_AUTH_FILE`, `STALKERHEK_FILTERS_FILE`, restart env documented
+- README — stability defaults table and 24h recycle note
+- `.gitignore` / `.dockerignore` — exclude credentials, local data, and build artifacts (`.github/` workflows are **not** ignored)
+
+### Fixed
+
+- **HLS mutex handling** — `/iptv/` streams no longer unlock the channel mutex twice (could cause panics or flaky playback on segment requests)
+- **HLS probe errors** — unlock channel mutex when upstream probe fails
+- **Root vs `/iptv/` errors** — consistent `503 channel unavailable` instead of generic 500
+- **M3U8 attribute escaping** — quotes/newlines in channel names no longer break `#EXTINF` lines
+- **Health check** — fresh installs with no profiles return HTTP 200 (`no_profiles`) so Docker healthchecks pass
+- **Runtime tuning** — settings now apply via `init()` on boot (previously only after saving in the UI)
+
+### Security
+
+- Reinforced git/docker ignore rules for `profiles.json`, `auth.json`, `filters.json`, `.env`, and `data/`
+
+### Thanks
+
+Special thanks to **[zedstate](https://github.com/zedstate)** for their pull request and M3U8 normalization work. Their changes were reviewed and integrated into this release (playlist metadata, genre handling, superscript cleanup, and Dispatcharr-friendly output) even though the PR was not merged as-is.
+
+---
+
 ## [Unreleased] - 2026-02-21
 
 ### Added
@@ -118,7 +175,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Contributing
 
 When adding changes to this changelog:
-1. Add entries under `[Unreleased]`
+1. Add a dated section or entries under `[Unreleased]`
 2. Categorize as Added, Changed, Deprecated, Removed, Fixed, or Security
 3. Keep entries concise but descriptive
 4. Reference issue numbers when applicable

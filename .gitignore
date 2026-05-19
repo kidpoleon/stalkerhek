@@ -1,10 +1,11 @@
 ########################
 # Go / build artifacts #
 ########################
-# Compiled binaries and build output directories.
 /bin/
 /dist/
 /build/
+/stalkerhek
+/stalkerhek.exe
 
 *.exe
 *.exe~
@@ -27,39 +28,28 @@ coverage.*
 /go.work.sum
 
 ############################
-# Runtime state / user data #
+# Runtime state / secrets  #
 ############################
-# These files contain portal URLs, MACs, tokens, and per-profile configuration.
-# They MUST NOT be committed.
+# Portal URLs, MAC addresses, passwords, and filter state — never commit.
 profiles.json
 filters.json
 auth.json
+*.json.bak
+*.json.tmp
 
-# Common persistent data volume directories.
 data/
 /data/
 
-# Ad-hoc logs and crash outputs.
 *.log
 logs/
 /logs/
 
-# Optional local config (if you create one).
 stalkerhek.yml
 stalkerhek.yaml
 
-########################
-# Secrets / env files   #
-########################
-# If you add environment-based configuration locally.
 .env
 .env.*
 *.env
-
-########################
-# CI / GitHub Actions #
-########################
-.github/
 
 ########################
 # Editor / OS artifacts #

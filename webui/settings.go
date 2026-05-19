@@ -10,20 +10,32 @@ import (
 	"github.com/kidpoleon/stalkerhek/proxy"
 )
 
+// DefaultRuntimeSettings are production-oriented defaults for IPTV HLS proxying.
+// Tuned for stability over minimum latency (see README Advanced settings).
+var DefaultRuntimeSettings = RuntimeSettings{
+	PlaylistDelaySegments:        5,
+	ResponseHeaderTimeoutSeconds: 35,
+	MaxIdleConnsPerHost:          128,
+	HLSChannelLinkTTLSeconds:     180,
+	MediaChannelLinkTTLSeconds:   45,
+}
+
 type RuntimeSettings struct {
-	PlaylistDelaySegments int `json:"playlist_delay_segments"`
+	PlaylistDelaySegments        int `json:"playlist_delay_segments"`
 	ResponseHeaderTimeoutSeconds int `json:"response_header_timeout_seconds"`
-	MaxIdleConnsPerHost int `json:"max_idle_conns_per_host"`
+	MaxIdleConnsPerHost          int `json:"max_idle_conns_per_host"`
+	HLSChannelLinkTTLSeconds     int `json:"hls_channel_link_ttl_seconds"`
+	MediaChannelLinkTTLSeconds   int `json:"media_channel_link_ttl_seconds"`
 }
 
 var (
-	settingsMu sync.RWMutex
-	runtimeSettings = RuntimeSettings{
-		PlaylistDelaySegments: 3,
-		ResponseHeaderTimeoutSeconds: 25,
-		MaxIdleConnsPerHost: 128,
-	}
+	settingsMu      sync.RWMutex
+	runtimeSettings = DefaultRuntimeSettings
 )
+
+func init() {
+	applyRuntimeSettings(DefaultRuntimeSettings)
+}
 
 func GetRuntimeSettings() RuntimeSettings {
 	settingsMu.RLock()
@@ -50,6 +62,18 @@ func applyRuntimeSettings(s RuntimeSettings) {
 	if s.MaxIdleConnsPerHost > 256 {
 		s.MaxIdleConnsPerHost = 256
 	}
+	if s.HLSChannelLinkTTLSeconds < 30 {
+		s.HLSChannelLinkTTLSeconds = 30
+	}
+	if s.HLSChannelLinkTTLSeconds > 600 {
+		s.HLSChannelLinkTTLSeconds = 600
+	}
+	if s.MediaChannelLinkTTLSeconds < 5 {
+		s.MediaChannelLinkTTLSeconds = 5
+	}
+	if s.MediaChannelLinkTTLSeconds > 120 {
+		s.MediaChannelLinkTTLSeconds = 120
+	}
 
 	settingsMu.Lock()
 	runtimeSettings = s
@@ -58,9 +82,16 @@ func applyRuntimeSettings(s RuntimeSettings) {
 	hls.SetPlaylistDelaySegments(s.PlaylistDelaySegments)
 	hls.UpdateResponseHeaderTimeout(time.Duration(s.ResponseHeaderTimeoutSeconds) * time.Second)
 	hls.UpdateMaxIdleConnsPerHost(s.MaxIdleConnsPerHost)
+	hls.SetChannelLinkTTL(
+		time.Duration(s.HLSChannelLinkTTLSeconds)*time.Second,
+		time.Duration(s.MediaChannelLinkTTLSeconds)*time.Second,
+	)
 
 	proxy.UpdateResponseHeaderTimeout(time.Duration(s.ResponseHeaderTimeoutSeconds) * time.Second)
 	proxy.UpdateMaxIdleConnsPerHost(s.MaxIdleConnsPerHost)
+
+	LogInfo("SETTINGS", "applied playlist_delay=%d header_timeout=%ds idle_conns=%d hls_link_ttl=%ds",
+		s.PlaylistDelaySegments, s.ResponseHeaderTimeoutSeconds, s.MaxIdleConnsPerHost, s.HLSChannelLinkTTLSeconds)
 }
 
 func RegisterSettingsHandlers(mux *http.ServeMux) {
@@ -84,6 +115,12 @@ func RegisterSettingsHandlers(mux *http.ServeMux) {
 			}
 			if v := r.FormValue("max_idle_conns_per_host"); v != "" {
 				cur.MaxIdleConnsPerHost = atoiSafe(v)
+			}
+			if v := r.FormValue("hls_channel_link_ttl_seconds"); v != "" {
+				cur.HLSChannelLinkTTLSeconds = atoiSafe(v)
+			}
+			if v := r.FormValue("media_channel_link_ttl_seconds"); v != "" {
+				cur.MediaChannelLinkTTLSeconds = atoiSafe(v)
 			}
 			applyRuntimeSettings(cur)
 			w.Header().Set("Content-Type", "application/json")

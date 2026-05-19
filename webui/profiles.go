@@ -815,7 +815,7 @@ func RegisterProfileHandlers(mux *http.ServeMux, onStart func()) {
 
     <div class="topbar">
       <div class="banner" aria-label="Stalkerhek">
-        <img src="https://i.ibb.co/WWL37xW9/STALKERHEK-BANNER-v2-3840x2160.png" alt="Stalkerhek" />
+        <img src="/assets/banner.png" alt="Stalkerhek" />
       </div>
     </div>
 
@@ -999,17 +999,17 @@ func RegisterProfileHandlers(mux *http.ServeMux, onStart func()) {
 		  <div class="advgrid">
 			<div class="stat">
 			  <div class="lbl">Playlist delay (segments)</div>
-			  <input id="s_delay" name="playlist_delay_segments" inputmode="numeric" placeholder="Example: 10" title="Helps prevent random buffering by playing a little behind live.&#10;&#10;Good starting point:&#10;- 10&#10;If it still buffers:&#10;- 15 to 20" />
+			  <input id="s_delay" name="playlist_delay_segments" inputmode="numeric" placeholder="Default: 5" title="Helps prevent random buffering by playing a little behind live.&#10;&#10;Default: 5&#10;If it still buffers: 8–12" />
 			  <div class="hint">Adds latency but can reduce buffering.</div>
 			</div>
 			<div class="stat">
 			  <div class="lbl">Upstream header timeout (sec)</div>
-			  <input id="s_rht" name="response_header_timeout_seconds" inputmode="numeric" placeholder="Example: 15" title="How long we wait for your provider to start responding.&#10;&#10;Recommended:&#10;- 15 (default)&#10;- 20 to 30 if your provider is slow" />
+			  <input id="s_rht" name="response_header_timeout_seconds" inputmode="numeric" placeholder="Default: 35" title="How long we wait for your provider to start responding.&#10;&#10;Default: 35&#10;Raise to 45–60 on slow portals" />
 			  <div class="hint">How long to wait for upstream response headers.</div>
 			</div>
 			<div class="stat">
 			  <div class="lbl">Max idle conns/host</div>
-			  <input id="s_idle" name="max_idle_conns_per_host" inputmode="numeric" placeholder="Example: 64" title="How many spare connections we keep ready.&#10;&#10;Recommended:&#10;- 64 (default)&#10;- 96 to 128 if many devices stream at once" />
+			  <input id="s_idle" name="max_idle_conns_per_host" inputmode="numeric" placeholder="Default: 128" title="How many spare connections we keep ready.&#10;&#10;Default: 128&#10;Lower only if the host is memory-limited" />
 			  <div class="hint">Higher can improve concurrency.</div>
 			</div>
 		  </div>
@@ -1385,6 +1385,20 @@ func RegisterProfileHandlers(mux *http.ServeMux, onStart func()) {
 		qeModal.style.display = 'none';
 	});
 	// Save advanced settings
+	(async function loadRuntimeSettings(){
+		try{
+			const r=await fetch('/api/settings');
+			if(!r.ok) return;
+			const s=await r.json();
+			const d=document.getElementById('s_delay');
+			const h=document.getElementById('s_rht');
+			const i=document.getElementById('s_idle');
+			if(d && s.playlist_delay_segments!=null) d.placeholder='Current: '+s.playlist_delay_segments;
+			if(h && s.response_header_timeout_seconds!=null) h.placeholder='Current: '+s.response_header_timeout_seconds;
+			if(i && s.max_idle_conns_per_host!=null) i.placeholder='Current: '+s.max_idle_conns_per_host;
+		}catch(e){}
+	})();
+
 	document.getElementById('saveSettings').addEventListener('click', async ()=>{
 		const delay=document.getElementById('s_delay').value||'';
 		const rht=document.getElementById('s_rht').value||'';

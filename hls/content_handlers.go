@@ -32,14 +32,22 @@ func handleContent(cr *ContentRequest) {
 	}
 }
 
+// escapeM3U8Attr sanitizes attribute values so quotes in channel names cannot break #EXTINF lines.
+func escapeM3U8Attr(s string) string {
+	s = strings.ReplaceAll(s, `"`, "'")
+	s = strings.ReplaceAll(s, "\n", " ")
+	s = strings.ReplaceAll(s, "\r", " ")
+	return strings.TrimSpace(s)
+}
+
 // ####################################################
 
 func handleContentUnknown(cr *ContentRequest) {
 	resp, err := response(cr.ChannelRef.Link)
 	if err != nil {
-		// Don't unlock here - the caller (handleContent or channelHandler) owns the lock
-		http.Error(cr.ResponseWriter, "internal server error", http.StatusInternalServerError)
-		log.Println(err)
+		cr.ChannelRef.Mux.Unlock()
+		http.Error(cr.ResponseWriter, "stream unavailable", http.StatusServiceUnavailable)
+		log.Printf("[HLS] probe upstream failed channel=%q err=%v", cr.Title, err)
 		return
 	}
 	defer resp.Body.Close()
@@ -67,7 +75,7 @@ func handleContentHLS(cr *ContentRequest) {
 
 	resp, err := response(link)
 	if err != nil {
-		log.Printf("[ERROR] HLS stream failed for channel %s: %v", cr.Title, err)
+		log.Printf("[HLS] segment fetch failed channel=%q suffix=%q err=%v", cr.Title, cr.Suffix, err)
 		http.Error(cr.ResponseWriter, "stream unavailable", http.StatusServiceUnavailable)
 		return
 	}
@@ -102,7 +110,7 @@ func handleEstablishedContentHLS(cr *ContentRequest, resp *http.Response, link s
 func handleContentMedia(cr *ContentRequest) {
 	resp, err := response(cr.Channel.Link)
 	if err != nil {
-		log.Printf("[ERROR] Media stream failed for channel %s: %v", cr.Title, err)
+		log.Printf("[HLS] media upstream failed channel=%q err=%v", cr.Title, err)
 		http.Error(cr.ResponseWriter, "stream unavailable", http.StatusServiceUnavailable)
 		return
 	}

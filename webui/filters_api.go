@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
-	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -13,8 +12,6 @@ import (
 	"github.com/kidpoleon/stalkerhek/filterstore"
 	"github.com/kidpoleon/stalkerhek/stalker"
 )
-
-var deriveCatStripRE = regexp.MustCompile(`(?i)^\s*(\[[^\]]*\]|\([^\)]*\)|\{[^\}]*\})\s*`)
 
 type genreInfo struct {
 	GenreID   string `json:"genre_id"`
@@ -26,74 +23,14 @@ type genreInfo struct {
 	Blocked   int    `json:"blocked"`
 }
 
-	// Category is a derived grouping key used by the WebUI.
-	// We keep it server-side so UI stays consistent across portals.
-	// Examples:
-	//   "MX| DAZN" => "MX"
-	//   "US - Sports" => "US"
-	//   "Sports" => "Sports"
-	// It is intentionally heuristic and designed to be predictable.
-	func deriveCategory(name string) string {
-		n := strings.TrimSpace(name)
-		if n == "" {
-			return "Other"
-		}
-		// Normalize common noisy prefixes like [UK], (VIP), {HD}.
-		n = deriveCatStripRE.ReplaceAllString(n, "")
-		n = strings.TrimSpace(n)
-		n = strings.Join(strings.Fields(n), " ")
-		// Normalize unicode-ish separators and bullets into spaces.
-		repl := strings.NewReplacer(
-			"•", " ",
-			"·", " ",
-			"—", "-",
-			"–", "-",
-			"→", " ",
-			"⇒", " ",
-			"»", " ",
-		)
-		n = repl.Replace(n)
-		n = strings.Join(strings.Fields(n), " ")
-		// Normalize common IPTV separators.
-		pipeNorm := strings.ReplaceAll(n, " | ", "|")
-		pipeNorm = strings.ReplaceAll(pipeNorm, "| ", "|")
-		pipeNorm = strings.ReplaceAll(pipeNorm, " |", "|")
-		pipeNorm = strings.ReplaceAll(pipeNorm, "||", "|")
-		if i := strings.Index(pipeNorm, "|"); i > 0 {
-			left := strings.TrimSpace(pipeNorm[:i])
-			if left != "" {
-				return left
-			}
-		}
-		// Fallback: take first token after replacing separators with spaces.
-		seps := []string{"/", ":", ">", "-", "_", "\\", ".", ","}
-		for _, s := range seps {
-			n = strings.ReplaceAll(n, s, " ")
-		}
-		n = strings.Join(strings.Fields(n), " ")
-		parts := strings.Split(n, " ")
-		if len(parts) == 0 {
-			return "Other"
-		}
-		first := strings.TrimSpace(parts[0])
-		if first == "" {
-			return "Other"
-		}
-		// Small prefix groups (US/UK/MX) often want the second token too.
-		if len(first) <= 3 && len(parts) > 1 {
-			return strings.TrimSpace(first + " " + parts[1])
-		}
-		return first
-	}
-
-	type categoryInfo struct {
-		Category string `json:"category"`
-		Total    int    `json:"total"`
-		Enabled  int    `json:"enabled"`
-		Blocked  int    `json:"blocked"`
-		Genres   int    `json:"genres"`
-		Disabled int    `json:"disabled_genres"`
-	}
+type categoryInfo struct {
+	Category string `json:"category"`
+	Total    int    `json:"total"`
+	Enabled  int    `json:"enabled"`
+	Blocked  int    `json:"blocked"`
+	Genres   int    `json:"genres"`
+	Disabled int    `json:"disabled_genres"`
+}
 
 type channelInfo struct {
 	Title         string `json:"title"`
@@ -125,7 +62,7 @@ func RegisterFilterHandlers(mux *http.ServeMux) {
 			if ch == nil {
 				continue
 			}
-			cat := deriveCategory(strings.TrimSpace(ch.Genre()))
+			cat := stalker.DeriveCategory(strings.TrimSpace(ch.Genre()))
 			ci := m[cat]
 			if ci == nil {
 				ci = &categoryInfo{Category: cat}
@@ -166,7 +103,13 @@ func RegisterFilterHandlers(mux *http.ServeMux) {
 		for _, v := range m {
 			arr = append(arr, *v)
 		}
-		sort.Slice(arr, func(i, j int) bool { return strings.ToLower(arr[i].Category) < strings.ToLower(arr[j].Category) })
+		sort.Slice(arr, func(i, j int) bool {
+			ki, kj := stalker.CategorySortKey(arr[i].Category), stalker.CategorySortKey(arr[j].Category)
+			if ki != kj {
+				return ki < kj
+			}
+			return stalker.CompareNatural(arr[i].Category, arr[j].Category) < 0
+		})
 		_ = json.NewEncoder(w).Encode(arr)
 	})
 
@@ -260,7 +203,7 @@ func RegisterFilterHandlers(mux *http.ServeMux) {
 				gid = "Other"
 			}
 			gname := strings.TrimSpace(ch.Genre())
-			cat := deriveCategory(gname)
+			cat := stalker.DeriveCategory(gname)
 			if catFilter != "" && cat != catFilter {
 				continue
 			}
@@ -285,7 +228,16 @@ func RegisterFilterHandlers(mux *http.ServeMux) {
 			gi.Disabled = filterstore.IsGenreDisabled(pid, gi.GenreID)
 			arr = append(arr, *gi)
 		}
-		sort.Slice(arr, func(i, j int) bool { return strings.ToLower(arr[i].Name) < strings.ToLower(arr[j].Name) })
+		sort.Slice(arr, func(i, j int) bool {
+			ci, cj := stalker.CategorySortKey(arr[i].Category), stalker.CategorySortKey(arr[j].Category)
+			if ci != cj {
+				return ci < cj
+			}
+			if arr[i].Category != arr[j].Category {
+				return stalker.CompareNatural(arr[i].Category, arr[j].Category) < 0
+			}
+			return stalker.CompareNatural(arr[i].Name, arr[j].Name) < 0
+		})
 		_ = json.NewEncoder(w).Encode(arr)
 	})
 
@@ -382,6 +334,18 @@ func RegisterFilterHandlers(mux *http.ServeMux) {
 			matches = append(matches, channelMatch{idx: idx, ch: ch})
 		}
 
+		sort.Slice(matches, func(i, j int) bool {
+			ti := matches[i].ch.Title
+			tj := matches[j].ch.Title
+			if ti == "" {
+				ti = keys[matches[i].idx]
+			}
+			if tj == "" {
+				tj = keys[matches[j].idx]
+			}
+			return stalker.CompareNatural(ti, tj) < 0
+		})
+
 		// Only get channels for the current page
 		pageMatches := make([]channelMatch, 0, lim)
 		for i, m := range matches {
@@ -477,7 +441,7 @@ func RegisterFilterHandlers(mux *http.ServeMux) {
 			if ch == nil {
 				continue
 			}
-			if deriveCategory(strings.TrimSpace(ch.Genre())) != cat {
+			if stalker.DeriveCategory(strings.TrimSpace(ch.Genre())) != cat {
 				continue
 			}
 			gid := strings.TrimSpace(ch.GenreID)
@@ -540,7 +504,7 @@ func RegisterFilterHandlers(mux *http.ServeMux) {
 			if ch == nil {
 				continue
 			}
-			cat := deriveCategory(strings.TrimSpace(ch.Genre()))
+			cat := stalker.DeriveCategory(strings.TrimSpace(ch.Genre()))
 			if _, ok := cats[cat]; !ok {
 				continue
 			}

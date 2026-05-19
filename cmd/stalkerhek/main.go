@@ -10,6 +10,7 @@ import (
 	"sync"
 	"syscall"
 
+	"github.com/kidpoleon/stalkerhek/maintenance"
 	"github.com/kidpoleon/stalkerhek/stalker"
 	"github.com/kidpoleon/stalkerhek/webui"
 )
@@ -30,8 +31,10 @@ func main() {
 	flag.Parse()
 
 	webui.InitProfilesFileFromEnv()
+	webui.LogInfo("STARTUP", "stalkerhek starting (runtime tuning defaults applied)")
+	maintenance.StartScheduledRestart(ctx)
 	if err := webui.LoadFilters(); err != nil {
-		log.Printf("failed to load filters: %v", err)
+		webui.LogWarn("STARTUP", "failed to load filters: %v", err)
 	}
 
 	// Initialize in-memory configuration; WebUI will collect portal URL and MAC.

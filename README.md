@@ -120,6 +120,8 @@ services:
     restart: unless-stopped
     environment:
       - STALKERHEK_PROFILES_FILE=/data/profiles.json
+      - STALKERHEK_AUTH_FILE=/data/auth.json
+      - STALKERHEK_FILTERS_FILE=/data/filters.json
     volumes:
       - ./data:/data
 ```
@@ -284,14 +286,22 @@ Note: Filters UI is intentionally **desktop-focused**.
 
 ## Advanced settings (stability)
 
-In the Dashboard "Advanced Settings":
-- **Playlist delay (segments)**: adds latency but often reduces buffering
-- **Upstream header timeout**: increase if the provider is slow
-- **Max idle conns/host**: helps with multiple concurrent streams
+Defaults are applied on startup (no save required):
+
+| Setting | Default | Purpose |
+|---------|---------|---------|
+| Playlist delay | 5 segments | Buffers live HLS slightly to reduce rebuffering |
+| Upstream header timeout | 35s | Waits longer for slow IPTV origins |
+| Max idle conns/host | 128 | Keeps warm connections for concurrent viewers |
+| HLS link reuse | 180s | Avoids re-auth hiccups during playback |
+
+In the Dashboard **Advanced Settings** you can override these process-wide values.
 
 If you experience buffering:
-- Increase Playlist delay first
-- Then increase Upstream header timeout
+- Increase Playlist delay first (try 8–12)
+- Then increase Upstream header timeout (45–60)
+
+The process also recycles every **24 hours** (Docker `restart: unless-stopped`); `profiles.json`, auth, and filters on disk are unchanged.
 
 ## Persistence (where data is stored)
 

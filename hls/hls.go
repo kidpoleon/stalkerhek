@@ -34,11 +34,14 @@ func StartWithContext(ctx context.Context, profileID int, chs map[string]*stalke
 				Mux:  &sync.Mutex{},
 				Link: v.Logo(),
 			},
-			Genre: v.Genre(),
+			Genre:    v.Genre(),
+			RawGenre: v.RawGenre(),
 		}
 		s.sortedChannels = append(s.sortedChannels, k)
 	}
-	sort.Strings(s.sortedChannels)
+	sort.Slice(s.sortedChannels, func(i, j int) bool {
+		return stalker.CompareNatural(s.sortedChannels[i], s.sortedChannels[j]) < 0
+	})
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/iptv", s.playlistHandler)

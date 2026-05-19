@@ -25,7 +25,9 @@ func SetProfileChannels(profileID int, chs map[string]*stalker.Channel) {
 		}
 		keys = append(keys, k)
 	}
-	sort.Strings(keys)
+	sort.Slice(keys, func(i, j int) bool {
+		return stalker.CompareNatural(keys[i], keys[j]) < 0
+	})
 	profileKeys[profileID] = keys
 }
 

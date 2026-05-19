@@ -119,6 +119,20 @@ func (c *Channel) Genre() string {
 	return strings.Title(g)
 }
 
+// RawGenre returns the portal genre title exactly as received, without any
+// case transformation. Returns an empty string when no genre is available.
+// Used for M3U8 group-title output where faithful portal casing is preferred.
+func (c *Channel) RawGenre() string {
+	if c.Genres == nil || *c.Genres == nil {
+		return ""
+	}
+	g, ok := (*c.Genres)[c.GenreID]
+	if !ok || strings.TrimSpace(g) == "" {
+		return ""
+	}
+	return strings.TrimSpace(g)
+}
+
 // RetrieveChannels retrieves all TV channels from stalker portal.
 func (p *Portal) RetrieveChannels() (map[string]*Channel, error) {
 	type tmpStruct struct {

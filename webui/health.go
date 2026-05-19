@@ -49,7 +49,7 @@ var (
 
 // RegisterHealthHandlers mounts /health, /metrics, and /info endpoints
 func RegisterHealthHandlers(mux *http.ServeMux) {
-	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+	healthHandler := func(w http.ResponseWriter, r *http.Request) {
 		healthMu.RLock()
 		defer healthMu.RUnlock()
 
@@ -91,13 +91,17 @@ func RegisterHealthHandlers(mux *http.ServeMux) {
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		if status == "healthy" {
-			w.WriteHeader(http.StatusOK)
-		} else {
+		// WebUI is up; only mark unhealthy when profiles exist but are in error state.
+		switch status {
+		case "degraded":
 			w.WriteHeader(http.StatusServiceUnavailable)
+		default:
+			w.WriteHeader(http.StatusOK)
 		}
 		_ = json.NewEncoder(w).Encode(h)
-	})
+	}
+	mux.HandleFunc("/health", healthHandler)
+	mux.HandleFunc("/healthz", healthHandler)
 
 	mux.HandleFunc("/metrics", func(w http.ResponseWriter, r *http.Request) {
 		healthMu.RLock()

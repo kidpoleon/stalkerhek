@@ -9,15 +9,20 @@ services:
     # NOTE: Host networking works on Linux. On Docker Desktop (Windows/macOS), use the bridge-mode example below.
     network_mode: host
 
-    # IMPORTANT:
-    # profiles are stored in /data inside the container.
-    # This volume persists your profiles between restarts.
     environment:
       - STALKERHEK_PROFILES_FILE=/data/profiles.json
       - STALKERHEK_AUTH_FILE=/data/auth.json
       - STALKERHEK_FILTERS_FILE=/data/filters.json
+      - STALKERHEK_ROOT=/app
+      # Process exits cleanly every 24h; Docker restarts it (config in /data is kept).
+      - STALKERHEK_RESTART_HOURS=24
     volumes:
       - ./data:/data
+
+    # Optional GPU (Linux + Intel/AMD VAAPI). Stalkerhek proxies streams; ffmpeg is used for
+    # diagnostics and future transcode hooks. Uncomment if your host exposes /dev/dri:
+    # devices:
+    #   - /dev/dri:/dev/dri
 
 # Bridge-mode example (Docker Desktop / non-Linux):
 # You MUST publish every HLS/Proxy port you plan to use.
@@ -35,5 +40,7 @@ services:
 #       - STALKERHEK_PROFILES_FILE=/data/profiles.json
 #       - STALKERHEK_AUTH_FILE=/data/auth.json
 #       - STALKERHEK_FILTERS_FILE=/data/filters.json
+#       - STALKERHEK_ROOT=/app
+#       - STALKERHEK_RESTART_HOURS=24
 #     volumes:
 #       - ./data:/data

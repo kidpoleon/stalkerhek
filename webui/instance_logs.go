@@ -10,23 +10,42 @@ import (
 	"time"
 )
 
+const (
+	instanceLogMaxEntries = 8000
+	instanceLogRetention  = 48 * time.Hour // 2 days
+)
+
+type logEntry struct {
+	at   time.Time
+	line string
+}
+
 type instanceLogHub struct {
 	mu         sync.RWMutex
 	maxEntries int
-	entries    []string
+	retention  time.Duration
+	entries    []logEntry
 	subs       map[chan string]struct{}
 }
 
-func newInstanceLogHub(maxEntries int) *instanceLogHub {
+func newInstanceLogHub(maxEntries int, retention time.Duration) *instanceLogHub {
 	if maxEntries <= 0 {
-		maxEntries = 2000
+		maxEntries = instanceLogMaxEntries
 	}
-	return &instanceLogHub{maxEntries: maxEntries, entries: make([]string, 0, maxEntries), subs: map[chan string]struct{}{}}
+	if retention <= 0 {
+		retention = instanceLogRetention
+	}
+	return &instanceLogHub{
+		maxEntries: maxEntries,
+		retention:  retention,
+		entries:    make([]logEntry, 0, 256),
+		subs:       map[chan string]struct{}{},
+	}
 }
 
 var (
 	instMu  sync.Mutex
-	instHub = newInstanceLogHub(2000)
+	instHub = newInstanceLogHub(instanceLogMaxEntries, instanceLogRetention)
 )
 
 type instanceLogWriter struct {
@@ -58,12 +77,20 @@ func appendInstanceLogLine(line string) {
 	if line == "" {
 		return
 	}
+	now := time.Now()
 	instHub.mu.Lock()
-	if len(instHub.entries) >= instHub.maxEntries {
-		copy(instHub.entries, instHub.entries[1:])
-		instHub.entries = instHub.entries[:len(instHub.entries)-1]
+	cutoff := now.Add(-instHub.retention)
+	kept := instHub.entries[:0]
+	for _, e := range instHub.entries {
+		if e.at.After(cutoff) {
+			kept = append(kept, e)
+		}
 	}
-	instHub.entries = append(instHub.entries, line)
+	instHub.entries = kept
+	if len(instHub.entries) >= instHub.maxEntries {
+		instHub.entries = instHub.entries[len(instHub.entries)-instHub.maxEntries+1:]
+	}
+	instHub.entries = append(instHub.entries, logEntry{at: now, line: line})
 	for ch := range instHub.subs {
 		select {
 		case ch <- line:
@@ -104,7 +131,9 @@ func RegisterInstanceLogHandlers(mux *http.ServeMux) {
 		instHub.mu.Lock()
 		instHub.subs[ch] = struct{}{}
 		history := make([]string, len(instHub.entries))
-		copy(history, instHub.entries)
+		for i, e := range instHub.entries {
+			history[i] = e.line
+		}
 		instHub.mu.Unlock()
 
 		defer func() {
@@ -181,7 +210,7 @@ func instanceLogsPageHTML() string {
   <div class="wrap">
     <div>
       <h1><i class="fa-regular fa-file-lines"></i> Instance Logs</h1>
-      <div class="sub">Live logs from the running Stalkerhek process. <a href="/dashboard"><i class="fa-solid fa-arrow-left"></i> Back to Dashboard</a></div>
+      <div class="sub">Live logs (kept up to 2 days, max ~8000 lines). Service recycles every 24h; profiles on disk are kept. <a href="/dashboard"><i class="fa-solid fa-arrow-left"></i> Back to Dashboard</a></div>
     </div>
     <div class="box" id="box"></div>
   </div>
