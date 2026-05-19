@@ -12,26 +12,36 @@ import (
 // writeExtInf writes a single #EXTINF line and stream URL to the playlist.
 //
 // Field policy (keeps M3U8 clean for tools like Dispatcharr):
-//   - tvg-id    : blank — the raw Stalker CMD is an ffmpeg URL, not an EPG ID
+//   - tvg-id    : portal channel id when available (matches XMLTV); blank otherwise
 //   - tvg-name  : channel title with superscript/subscript decorators stripped
 //   - tvg-logo  : blank — relative logo paths break external tools; logo
 //                 serving still works internally via the /logo/ endpoint
 //   - group-title: raw portal genre name with superscripts stripped; this is
 //                  the "US| ESPN" level that sits directly above channels in
 //                  the UI drill-down, which is what M3U8 players group by
-func writeExtInf(w http.ResponseWriter, title, rawGenre, link string) {
+func writeExtInf(w http.ResponseWriter, ch *Channel, title, rawGenre, link string) {
 	tvgName := escapeM3U8Attr(stalker.CleanTitleForM3U8(title))
 	groupTitle := escapeM3U8Attr(stalker.CleanGenreForM3U8(rawGenre))
 	displayName := escapeM3U8Attr(stalker.CleanTitleForM3U8(title))
+	tvgID := ""
+	if ch != nil && ch.StalkerChannel != nil {
+		tvgID = escapeM3U8Attr(ch.StalkerChannel.EPGChannelID())
+	}
 	fmt.Fprintf(w,
-		"#EXTINF:-1 tvg-id=\"\" tvg-name=\"%s\" tvg-logo=\"\" group-title=\"%s\", %s\n%s\n",
-		tvgName, groupTitle, displayName, link,
+		"#EXTINF:-1 tvg-id=\"%s\" tvg-name=\"%s\" tvg-logo=\"\" group-title=\"%s\", %s\n%s\n",
+		tvgID, tvgName, groupTitle, displayName, link,
 	)
+}
+
+func (s *serverState) writePlaylistHeader(w http.ResponseWriter, scheme, host string) {
+	epgURL := stalker.FormatXMLTVURL(scheme, host, s.profileID)
+	fmt.Fprintf(w, "#EXTM3U url-tvg=\"%s\" x-tvg-url=\"%s\"\n", epgURL, epgURL)
 }
 
 // writePlaylist writes all #EXTINF entries sorted by group-title then channel
 // name (natural order). Duplicate cleaned titles keep the first entry after sort.
 func (s *serverState) writePlaylist(w http.ResponseWriter, scheme, host, prefix string) {
+	s.writePlaylistHeader(w, scheme, host)
 	items := buildSortedPlaylistItems(s.profileID, s.sortedChannels, s.playlist)
 	seen := make(map[string]struct{}, len(items))
 	for _, it := range items {
@@ -43,7 +53,7 @@ func (s *serverState) writePlaylist(w http.ResponseWriter, scheme, host, prefix 
 		}
 		seen[it.cleanName] = struct{}{}
 		link := scheme + "://" + host + prefix + url.PathEscape(it.title)
-		writeExtInf(w, it.title, it.ch.RawGenre, link)
+		writeExtInf(w, it.ch, it.title, it.ch.RawGenre, link)
 	}
 }
 
@@ -52,7 +62,6 @@ func (s *serverState) playlistHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "audio/x-mpegurl; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
 	scheme, host := externalBase(r)
-	fmt.Fprintln(w, "#EXTM3U")
 	s.writePlaylist(w, scheme, host, "/iptv/")
 }
 
@@ -129,7 +138,6 @@ func (s *serverState) rootHandler(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		scheme, host := externalBase(r)
 
-		fmt.Fprintln(w, "#EXTM3U")
 		s.writePlaylist(w, scheme, host, "/")
 		return
 	}

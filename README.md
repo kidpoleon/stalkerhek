@@ -284,6 +284,20 @@ Keyboard shortcuts in Channels:
 
 Note: Filters UI is intentionally **desktop-focused**.
 
+## EPG and VOD
+
+When a profile is **running**, Stalkerhek exposes guides and on-demand content from your portal (if the provider enables them).
+
+| Feature | URL (replace host / profile id) |
+|---------|----------------------------------|
+| XMLTV EPG | `http://<host>:4400/epg/<profileId>/xmltv.xml` |
+| Portal EPG + programmes | `.../xmltv.xml?programs=1&limit=200` |
+| Custom EPG (per profile) | Set **EPG guide URL** in Quick Edit → same XMLTV endpoint proxies your `.xml` / `.xml.gz` |
+| VOD sample M3U | `http://<host>:4400/vod/<profileId>/playlist.m3u` |
+| VOD API | `GET /api/vod/<profileId>/categories` and `/list?category=...` |
+
+Live HLS playlists (`http://<host>:<hlsPort>/iptv/`) include `url-tvg` pointing at the XMLTV URL above.
+
 ## Advanced settings (stability)
 
 Defaults are applied on startup (no save required):
@@ -366,4 +380,4 @@ Origins/inspiration:
 Author:
 - https://github.com/kidpoleon
 
-License: MIT
+License: [GNU GPL v3](LICENSE) — contact: kidpoleon@proton.me

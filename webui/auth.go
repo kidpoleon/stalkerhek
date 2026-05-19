@@ -152,6 +152,10 @@ func AuthMiddleware(next http.Handler) http.Handler {
 		publicPaths := []string{"/login", "/register", "/account", "/forgot-password", "/reset-password",
 			"/api/login", "/api/register", "/api/forgot-password", "/api/reset-password",
 			"/api/auth/status", "/health", "/healthz", "/api/trusted-subnets", "/assets/banner.png"}
+		if strings.HasPrefix(r.URL.Path, "/epg/") || strings.HasPrefix(r.URL.Path, "/vod/") {
+			next.ServeHTTP(w, r)
+			return
+		}
 		for _, path := range publicPaths {
 			if r.URL.Path == path {
 				next.ServeHTTP(w, r)

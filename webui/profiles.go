@@ -42,6 +42,8 @@ type Profile struct {
 	Username     string `json:"username,omitempty"`
 	Password     string `json:"password,omitempty"`
 	WatchDogTime int    `json:"watchdog_time,omitempty"`
+	// EPGURL is an optional external XMLTV guide (http/https, .xml or .xml.gz).
+	EPGURL string `json:"epg_url,omitempty"`
 }
 
 func profileWithDefaults(p Profile) Profile {
@@ -327,6 +329,7 @@ func StartProfileServices(p Profile) {
 			case err := <-errCh:
 				if err == nil {
 					lastErr = nil
+					RegisterProfilePortal(p.ID, cfg.Portal)
 					attempt = maxAttempts
 					break
 				}
@@ -474,6 +477,7 @@ func StartProfileServices(p Profile) {
 		if live.Add(-1) == 0 {
 			close(done)
 			ClearProfileChannels(p.ID)
+			ClearProfilePortal(p.ID)
 		}
 	}
 
@@ -557,6 +561,7 @@ func RegisterProfileHandlers(mux *http.ServeMux, onStart func()) {
 		password := strings.TrimSpace(r.FormValue("password"))
 		watchdogStr := strings.TrimSpace(r.FormValue("watchdog_time"))
 		watchdog, _ := strconv.Atoi(watchdogStr)
+		epgURL := strings.TrimSpace(r.FormValue("epg_url"))
 		if portal == "" || mac == "" || hlsStr == "" || proxyStr == "" {
 			http.Error(w, "portal, mac, hls_port, proxy_port are required", http.StatusBadRequest)
 			return
@@ -595,7 +600,9 @@ func RegisterProfileHandlers(mux *http.ServeMux, onStart func()) {
 					profiles[i].Username = username
 					profiles[i].Password = password
 					profiles[i].WatchDogTime = watchdog
+					profiles[i].EPGURL = epgURL
 					updated = true
+					InvalidateEPGCache(id)
 					break
 				}
 			}
@@ -626,6 +633,7 @@ func RegisterProfileHandlers(mux *http.ServeMux, onStart func()) {
 			Username:     username,
 			Password:     password,
 			WatchDogTime: watchdog,
+			EPGURL:       epgURL,
 		})
 		_ = SaveProfiles()
 		// Immediately start services for this profile in a goroutine
@@ -917,6 +925,10 @@ func RegisterProfileHandlers(mux *http.ServeMux, onStart func()) {
               <input id="signature" name="signature" placeholder="64-character hex (auto-generated if empty)" maxlength="64" title="64-character hexadecimal signature (leave empty for default)" />
               <div style="font-size:12px;color:var(--muted);margin-top:4px">64-char hex, default: all f's</div>
               
+              <label for="epg_url" style="margin-top:10px">EPG guide URL <span style="color:var(--muted);font-size:.85em">(optional)</span></label>
+              <input id="epg_url" name="epg_url" type="url" placeholder="https://example.com/guide.xml or guide.xml.gz" title="External XMLTV guide (.xml or .xml.gz). Leave empty to use portal EPG." />
+              <div style="font-size:12px;color:var(--muted);margin-top:4px;margin-bottom:10px">IPTV players use the profile EPG link, or portal EPG when the profile is running.</div>
+
               <div class="row two" style="margin-top:10px">
                 <div>
                   <label for="timezone">Time Zone <span style="color:var(--muted);font-size:.85em">(optional)</span></label>
@@ -946,7 +958,7 @@ func RegisterProfileHandlers(mux *http.ServeMux, onStart func()) {
       <div class="sub">Start or stop streaming, copy your links, or update your details. Editing will stop the stream first for safety.</div>
       <div id="profiles" class="profiles">
         {{range .Profiles}}
-          <div class="p" data-id="{{.ID}}" data-name="{{.Name}}" data-portal="{{.PortalURL}}" data-mac="{{.MAC}}" data-hls="{{.HlsPort}}" data-proxy="{{.ProxyPort}}" data-model="{{.Model}}" data-serial="{{.SerialNumber}}" data-deviceid="{{.DeviceID}}" data-deviceid2="{{.DeviceID2}}" data-signature="{{.Signature}}" data-timezone="{{.TimeZone}}" data-username="{{.Username}}" data-password="{{.Password}}" data-watchdog="{{.WatchDogTime}}">
+          <div class="p" data-id="{{.ID}}" data-name="{{.Name}}" data-portal="{{.PortalURL}}" data-mac="{{.MAC}}" data-hls="{{.HlsPort}}" data-proxy="{{.ProxyPort}}" data-model="{{.Model}}" data-serial="{{.SerialNumber}}" data-deviceid="{{.DeviceID}}" data-deviceid2="{{.DeviceID2}}" data-signature="{{.Signature}}" data-timezone="{{.TimeZone}}" data-username="{{.Username}}" data-password="{{.Password}}" data-watchdog="{{.WatchDogTime}}" data-epg-url="{{.EPGURL}}">
             <div class="phead">
               <div>
                 <div class="pname">{{if .Name}}{{.Name}}{{else}}Profile {{.ID}}{{end}}</div>
@@ -979,6 +991,8 @@ func RegisterProfileHandlers(mux *http.ServeMux, onStart func()) {
               <a class="ghost linkbtn" id="hls-{{.ID}}" href="#" data-copy="http://{{$.Host}}:{{.HlsPort}}/" title="Copy HLS endpoint"><i class="fa-solid fa-film"></i> <span class="btntext">HLS</span></a>
               <a class="ghost linkbtn proxybtn" id="pxy-{{.ID}}" href="#" data-copy="http://{{$.Host}}:{{.ProxyPort}}/" title="Copy Proxy endpoint"><i class="fa-solid fa-right-left"></i> <span class="btntext">Proxy</span></a>
               <a class="ghost linkbtn" href="/filters?id={{.ID}}" target="_blank" rel="noopener" title="Filter channels/genres for this profile"><i class="fa-solid fa-filter"></i> <span class="btntext">Filters</span></a>
+              <a class="ghost linkbtn" href="#" data-copy="http://{{$.Host}}:4400/epg/{{.ID}}/xmltv.xml" title="Copy XMLTV EPG URL for IPTV players"><i class="fa-solid fa-calendar-days"></i> <span class="btntext">EPG</span></a>
+              <a class="ghost linkbtn" href="#" data-copy="http://{{$.Host}}:4400/vod/{{.ID}}/playlist.m3u" title="Copy VOD playlist (sample categories)"><i class="fa-solid fa-clapperboard"></i> <span class="btntext">VOD</span></a>
             </div>
             <div class="meta" id="meta-{{.ID}}" title="Detailed status and channel count"></div>
           </div>
@@ -1081,6 +1095,11 @@ func RegisterProfileHandlers(mux *http.ServeMux, onStart func()) {
             <div style="font-size:11px;color:var(--muted)">Default: 5 minutes</div>
           </div>
         </div>
+
+        <label>EPG guide URL <span style="color:var(--muted);font-size:.85em">(optional)</span></label>
+        <input id="qe_epg_url" name="epg_url" type="url" placeholder="https://example.com/guide.xml or guide.xml.gz" />
+        <div style="font-size:11px;color:var(--muted);margin-bottom:12px">External XMLTV (.xml / .xml.gz). Leave empty to use portal EPG when running.</div>
+
 
         <div style="display:flex;gap:10px;justify-content:space-between;margin-top:20px">
           <button type="button" id="qeCancel" class="ghost" style="background:transparent;border:1px solid var(--border);color:var(--text)">Cancel</button>
@@ -1281,6 +1300,8 @@ func RegisterProfileHandlers(mux *http.ServeMux, onStart func()) {
       document.getElementById('username').value=card.getAttribute('data-username')||'';
       document.getElementById('password').value=card.getAttribute('data-password')||'';
       document.getElementById('watchdog_time').value=card.getAttribute('data-watchdog')||'';
+      const epgEl=document.getElementById('epg_url');
+      if(epgEl) epgEl.value=card.getAttribute('data-epg-url')||'';
 
       document.getElementById('saveBtn').innerHTML='<i class="fa-regular fa-floppy-disk"></i> <span class="btntext">Save Changes</span>';
       document.getElementById('cancelEdit').style.display='inline-flex';
@@ -1364,6 +1385,7 @@ func RegisterProfileHandlers(mux *http.ServeMux, onStart func()) {
 		document.getElementById('qe_signature').value = card.getAttribute('data-signature')||'';
 		document.getElementById('qe_timezone').value = card.getAttribute('data-timezone')||'';
 		document.getElementById('qe_watchdog_time').value = card.getAttribute('data-watchdog')||'';
+		document.getElementById('qe_epg_url').value = card.getAttribute('data-epg-url')||'';
 
 		// Show modal
 		qeModal.style.display = 'flex';

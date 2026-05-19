@@ -64,6 +64,45 @@ Special thanks to **[zedstate](https://github.com/zedstate)** for their pull req
 
 ---
 
+## [2025-05-20] — EPG & VOD
+
+### Added
+
+- **EPG (Electronic Program Guide)**
+  - Portal EPG via Stalker `get_short_epg` / `get_epg_info` (`stalker/epg.go`)
+  - XMLTV export: `http://<host>:4400/epg/<profileId>/xmltv.xml`
+  - Optional **custom EPG URL** per profile (`.xml` or `.xml.gz`) in Quick Edit Advanced Settings — proxied and cached for IPTV players
+  - Live HLS playlists include `url-tvg` / `x-tvg-url` and numeric `tvg-id` when the portal provides channel IDs (matches XMLTV)
+  - API: `GET /api/epg/{id}/channel?title=...` for program listings
+
+- **VOD (Video on Demand)**
+  - Portal VOD categories and paginated lists (`stalker/vod.go`)
+  - API: `GET /api/vod/{id}/categories`, `GET /api/vod/{id}/list?category=&page=`, `GET /api/vod/{id}/link?cmd=`
+  - Sample VOD M3U: `http://<host>:4400/vod/<profileId>/playlist.m3u`
+  - Play redirect: `/vod/<profileId>/play?cmd=...`
+
+- **Reference implementation** — patterns from [Cyogenus/IPTV-MAC-STALKER-PLAYER-BY-MY-1](https://github.com/Cyogenus/IPTV-MAC-STALKER-PLAYER-BY-MY-1) and [zedstate/stalkerhek](https://github.com/zedstate/stalkerhek) EPG work
+
+### Changed
+
+- License updated to **GNU GPL v3**
+- Contact: **kidpoleon@proton.me**
+- Dashboard profile row: **EPG** and **VOD** copy-link buttons
+
+### Fixed
+
+- HLS channel mutex lifecycle (prevents rare deadlocks on failed upstream probe)
+- M3U `tvg-id` uses portal channel id when available (improves EPG matching in TiviMate, Plex, Dispatcharr)
+- Custom EPG fetch (`.xml.gz`) no longer double-decompresses when the server already expands gzip bodies
+
+### Notes
+
+- EPG program data depends on your provider; use a custom XMLTV URL if the portal guide is empty or slow.
+- VOD sample playlist loads the first pages of up to five categories; full libraries use the JSON API.
+- Large channel lists: XMLTV defaults to channel definitions; add `?programs=1&limit=200` for portal programme data (capped for performance).
+
+---
+
 ## [Unreleased] - 2026-02-21
 
 ### Added
